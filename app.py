@@ -14,17 +14,22 @@ class EnergyIntelligenceEngine:
         self.electricity_zones = ['NYC', 'WEST', 'CAPITAL', 'NORTH', 'CENTRAL']
         self.gas_hubs = ['Transco Z6 NY', 'Algonquin Citygate', 'Tennessee Z4', 'Iroquois Waddington', 'Dominion South']
         
-        # Initialize real-time data streams
-        self.market_data = {}
+        # Initialize with default data
+        self.market_data = self.generate_initial_data()
         self.predictions = {}
         self.alerts = []
         self.trading_signals = []
         
+        # Generate initial predictions and signals
+        self.generate_predictions()
+        self.generate_trading_signals() 
+        self.generate_alerts()
+        
         # Start real-time data generation
         self.start_real_time_engine()
     
-    def generate_real_time_market_data(self):
-        """Generate electricity and natural gas market data"""
+    def generate_initial_data(self):
+        """Generate initial market data immediately"""
         current_time = datetime.now()
         
         # Generate electricity data
@@ -38,7 +43,7 @@ class EnergyIntelligenceEngine:
                 'da_price': round(base_price * random.uniform(0.95, 1.05), 2),
                 'load_mw': round(2000 + load_factor * 1500 + random.uniform(-200, 300), 1),
                 'heat_rate': round(random.uniform(7500, 9500), 0),
-                'spark_spread': 0  # Will calculate after gas prices
+                'spark_spread': 0
             }
         
         # Generate natural gas data
@@ -60,19 +65,22 @@ class EnergyIntelligenceEngine:
         avg_gas_price = sum(hub['price'] for hub in gas_data.values()) / len(gas_data)
         for zone in electricity_data:
             heat_rate = electricity_data[zone]['heat_rate']
-            gas_cost = (avg_gas_price * heat_rate) / 1000  # $/MWh
+            gas_cost = (avg_gas_price * heat_rate) / 1000
             electricity_data[zone]['spark_spread'] = round(
                 electricity_data[zone]['rt_price'] - gas_cost, 2
             )
         
-        self.market_data = {
+        return {
             'timestamp': current_time.isoformat(),
             'electricity': electricity_data,
             'natural_gas': gas_data,
             'henry_hub': round(henry_hub_base, 3),
             'avg_spark_spread': round(sum(zone['spark_spread'] for zone in electricity_data.values()) / len(electricity_data), 2)
         }
-        
+    
+    def generate_real_time_market_data(self):
+        """Generate updated market data"""
+        self.market_data = self.generate_initial_data()
         return self.market_data
     
     def get_hourly_pattern(self):
@@ -139,7 +147,7 @@ class EnergyIntelligenceEngine:
         # Spark spread opportunities
         for zone, data in self.market_data['electricity'].items():
             spread = data['spark_spread']
-            if spread > 15:  # Profitable spread
+            if spread > 15:
                 signals.append({
                     'type': 'spark_spread_trade',
                     'action': 'BUY_POWER_SELL_GAS',
@@ -149,7 +157,7 @@ class EnergyIntelligenceEngine:
                     'risk_score': round(random.uniform(0.2, 0.6), 3),
                     'confidence': round(random.uniform(0.75, 0.95), 3)
                 })
-            elif spread < 5:  # Negative spread
+            elif spread < 5:
                 signals.append({
                     'type': 'spark_spread_trade',
                     'action': 'SELL_POWER_BUY_GAS',
@@ -164,18 +172,21 @@ class EnergyIntelligenceEngine:
         gas_prices = list(self.market_data['natural_gas'].values())
         for i, hub1 in enumerate(self.gas_hubs):
             for hub2 in self.gas_hubs[i+1:]:
-                price_diff = abs(gas_prices[i]['price'] - gas_prices[self.gas_hubs.index(hub2)]['price'])
-                if price_diff > 0.30:  # Significant price difference
-                    signals.append({
-                        'type': 'gas_arbitrage',
-                        'action': 'ARBITRAGE',
-                        'hub_buy': hub1 if gas_prices[i]['price'] < gas_prices[self.gas_hubs.index(hub2)]['price'] else hub2,
-                        'hub_sell': hub2 if gas_prices[i]['price'] < gas_prices[self.gas_hubs.index(hub2)]['price'] else hub1,
-                        'spread': round(price_diff, 3),
-                        'profit_potential': round(price_diff * random.uniform(1000, 5000), 0),
-                        'risk_score': round(random.uniform(0.3, 0.7), 3),
-                        'confidence': round(random.uniform(0.70, 0.90), 3)
-                    })
+                if i < len(gas_prices):
+                    j = self.gas_hubs.index(hub2)
+                    if j < len(gas_prices):
+                        price_diff = abs(gas_prices[i]['price'] - gas_prices[j]['price'])
+                        if price_diff > 0.30:
+                            signals.append({
+                                'type': 'gas_arbitrage',
+                                'action': 'ARBITRAGE',
+                                'hub_buy': hub1 if gas_prices[i]['price'] < gas_prices[j]['price'] else hub2,
+                                'hub_sell': hub2 if gas_prices[i]['price'] < gas_prices[j]['price'] else hub1,
+                                'spread': round(price_diff, 3),
+                                'profit_potential': round(price_diff * random.uniform(1000, 5000), 0),
+                                'risk_score': round(random.uniform(0.3, 0.7), 3),
+                                'confidence': round(random.uniform(0.70, 0.90), 3)
+                            })
         
         # Power arbitrage
         power_prices = [(zone, data['rt_price']) for zone, data in self.market_data['electricity'].items()]
@@ -251,11 +262,11 @@ class EnergyIntelligenceEngine:
         def update_loop():
             while True:
                 try:
+                    time.sleep(30)  # Wait 30 seconds before first update
                     self.generate_real_time_market_data()
                     self.generate_predictions()
                     self.generate_trading_signals()
                     self.generate_alerts()
-                    time.sleep(30)
                 except Exception as e:
                     print(f"Error in real-time engine: {e}")
                     time.sleep(10)
@@ -266,7 +277,7 @@ class EnergyIntelligenceEngine:
 # Initialize the engine
 intelligence_engine = EnergyIntelligenceEngine()
 
-# HTML Template
+# HTML Template (same as before)
 html_template = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -841,6 +852,8 @@ html_template = '''
                 
                 const priceElement = document.getElementById('avg-power-price');
                 priceElement.className = 'metric-large ' + (avgPrice > 80 ? 'warning' : avgPrice > 120 ? 'loss' : 'neutral');
+                
+                document.getElementById('power-trend').textContent = 'Real-time data';
             }
             
             if (data.henry_hub) {
@@ -848,6 +861,8 @@ html_template = '''
                 
                 const gasElement = document.getElementById('henry-hub-price');
                 gasElement.className = 'metric-large ' + (data.henry_hub > 4.5 ? 'warning' : data.henry_hub > 6 ? 'loss' : 'neutral');
+                
+                document.getElementById('gas-trend').textContent = 'Real-time data';
             }
             
             if (data.avg_spark_spread !== undefined) {
@@ -855,6 +870,8 @@ html_template = '''
                 
                 const spreadElement = document.getElementById('avg-spark-spread');
                 spreadElement.className = 'metric-large ' + (data.avg_spark_spread > 15 ? 'profit' : data.avg_spark_spread < 5 ? 'loss' : 'neutral');
+                
+                document.getElementById('spread-trend').textContent = 'Real-time data';
             }
         }
         
@@ -915,27 +932,31 @@ html_template = '''
             const signalsList = document.getElementById('signals-list');
             signalsList.innerHTML = '';
             
-            signals.slice(0, 4).forEach(signal => {
-                const signalDiv = document.createElement('div');
-                signalDiv.className = 'signal-item';
-                
-                let displayText = '';
-                if (signal.type === 'spark_spread_trade') {
-                    displayText = `${signal.action.replace(/_/g, ' ')} in ${signal.zone}`;
-                } else if (signal.type === 'gas_arbitrage') {
-                    displayText = `Gas Arbitrage: ${signal.hub_buy} → ${signal.hub_sell}`;
-                } else if (signal.type === 'power_arbitrage') {
-                    displayText = `Power Arbitrage: ${signal.zone_buy} → ${signal.zone_sell}`;
-                }
-                
-                signalDiv.innerHTML = `
-                    <strong>${signal.type.replace(/_/g, ' ').toUpperCase()}</strong><br>
-                    <div style="margin: 5px 0;">${displayText}</div>
-                    <div style="color: #68d391; font-weight: bold;">Profit: ${signal.profit_potential.toLocaleString()}</div>
-                    <div style="color: #f6e05e; font-size: 0.9rem;">Risk: ${(signal.risk_score * 100).toFixed(0)}% | Confidence: ${(signal.confidence * 100).toFixed(0)}%</div>
-                `;
-                signalsList.appendChild(signalDiv);
-            });
+            if (signals.length === 0) {
+                signalsList.innerHTML = '<div class="signal-item">No active signals</div>';
+            } else {
+                signals.slice(0, 4).forEach(signal => {
+                    const signalDiv = document.createElement('div');
+                    signalDiv.className = 'signal-item';
+                    
+                    let displayText = '';
+                    if (signal.type === 'spark_spread_trade') {
+                        displayText = `${signal.action.replace(/_/g, ' ')} in ${signal.zone}`;
+                    } else if (signal.type === 'gas_arbitrage') {
+                        displayText = `Gas Arbitrage: ${signal.hub_buy} → ${signal.hub_sell}`;
+                    } else if (signal.type === 'power_arbitrage') {
+                        displayText = `Power Arbitrage: ${signal.zone_buy} → ${signal.zone_sell}`;
+                    }
+                    
+                    signalDiv.innerHTML = `
+                        <strong>${signal.type.replace(/_/g, ' ').toUpperCase()}</strong><br>
+                        <div style="margin: 5px 0;">${displayText}</div>
+                        <div style="color: #68d391; font-weight: bold;">Profit: ${signal.profit_potential.toLocaleString()}</div>
+                        <div style="color: #f6e05e; font-size: 0.9rem;">Risk: ${(signal.risk_score * 100).toFixed(0)}% | Confidence: ${(signal.confidence * 100).toFixed(0)}%</div>
+                    `;
+                    signalsList.appendChild(signalDiv);
+                });
+            }
             
             // Update signals table
             const tbody = document.getElementById('signals-tbody');
@@ -998,13 +1019,16 @@ html_template = '''
                 ]);
                 
                 // Refresh active chart
-                const activeTab = document.querySelector('.tab-btn.active').textContent.toLowerCase();
-                if (activeTab.includes('electricity')) {
-                    initPowerChart();
-                } else if (activeTab.includes('natural')) {
-                    initGasChart();
-                } else if (activeTab.includes('spark')) {
-                    initSpreadsChart();
+                const activeTab = document.querySelector('.tab-btn.active');
+                if (activeTab) {
+                    const activeTabText = activeTab.textContent.toLowerCase();
+                    if (activeTabText.includes('electricity')) {
+                        initPowerChart();
+                    } else if (activeTabText.includes('natural')) {
+                        initGasChart();
+                    } else if (activeTabText.includes('spark')) {
+                        initSpreadsChart();
+                    }
                 }
                 
                 console.log('Data refreshed successfully');
@@ -1017,13 +1041,15 @@ html_template = '''
         document.addEventListener('DOMContentLoaded', function() {
             console.log('🚀 Initializing Energy Intelligence Platform...');
             
-            // Initial data load
-            refreshData();
-            
-            // Initialize charts after data loads
+            // Initial data load with delay to ensure backend is ready
             setTimeout(() => {
-                initPowerChart();
-                console.log('✅ Platform initialized successfully!');
+                refreshData().then(() => {
+                    // Initialize charts after data loads
+                    setTimeout(() => {
+                        initPowerChart();
+                        console.log('✅ Platform initialized successfully!');
+                    }, 500);
+                });
             }, 1000);
             
             // Set up auto-refresh every 2 minutes
