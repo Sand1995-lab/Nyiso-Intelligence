@@ -1,216 +1,132 @@
-from flask import Flask, render_template_string, jsonify, request
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import requests
-import threading
+from flask import Flask, render_template_string, jsonify
+import json
+import random
 import time
+from datetime import datetime
 import os
-import warnings
-warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
 
-class SimplifiedNYISOCollector:
+class StandaloneNYISOData:
     def __init__(self):
         self.zones = ['CAPITL', 'CENTRL', 'DUNWOD', 'GENESE', 'HUD VL', 'LONGIL', 'MHK VL', 'MILLWD', 'N.Y.C.', 'NORTH', 'WEST']
-        self.current_data = {}
-        self.is_collecting = False
-        self.last_update = datetime.now()
         
-    def generate_realistic_data(self):
-        """Generate realistic NYISO market data without database"""
-        try:
-            current_time = datetime.now()
+    def generate_zone_data(self):
+        zone_data = []
+        total_load = 0
+        total_price = 0
+        
+        for zone in self.zones:
+            if zone == 'N.Y.C.':
+                base_price = random.uniform(55, 75)
+                load = random.uniform(7500, 9500)
+                congestion = random.uniform(10, 20)
+            elif zone in ['LONGIL', 'DUNWOD']:
+                base_price = random.uniform(45, 65)
+                load = random.uniform(2800, 3800)
+                congestion = random.uniform(5, 15)
+            else:
+                base_price = random.uniform(35, 55)
+                load = random.uniform(1500, 2500)
+                congestion = random.uniform(1, 8)
             
-            # Zone pricing data
-            zone_data = []
-            for zone in self.zones:
-                if zone == 'N.Y.C.':
-                    base_price = 45 + np.random.normal(0, 12)
-                    congestion = max(0, np.random.normal(8, 15))
-                    actual_load = np.random.normal(8500, 1200)
-                elif zone in ['LONGIL', 'DUNWOD']:
-                    base_price = 42 + np.random.normal(0, 10)
-                    congestion = max(0, np.random.normal(5, 12))
-                    actual_load = np.random.normal(3200, 600)
-                else:
-                    base_price = 38 + np.random.normal(0, 8)
-                    congestion = max(0, np.random.normal(2, 8))
-                    actual_load = np.random.normal(1800, 400)
-                
-                energy_component = base_price * 0.85
-                losses_component = base_price * 0.05
-                rt_price = energy_component + congestion + losses_component
-                
-                # Day-ahead price (5-10% different)
-                da_premium = np.random.normal(0, 0.08)
-                da_price = rt_price * (1 + da_premium)
-                
-                # Trading opportunity assessment
-                spread = abs(rt_price - da_price)
-                if spread > 10:
-                    opportunity = "High"
-                elif spread > 5:
-                    opportunity = "Medium"
-                else:
-                    opportunity = "Low"
-                
-                zone_data.append({
-                    'zone': zone,
-                    'rt_price': rt_price,
-                    'da_price': da_price,
-                    'congestion': congestion,
-                    'load': actual_load,
-                    'opportunity': opportunity
-                })
+            da_price = base_price * random.uniform(0.92, 1.08)
+            opportunity = "High" if abs(base_price - da_price) > 8 else "Medium" if abs(base_price - da_price) > 3 else "Low"
             
-            # Predictions data
-            predictions = []
-            for zone in self.zones:
-                base_price = 40 if zone != 'N.Y.C.' else 50
-                base_load = 2000 if zone != 'N.Y.C.' else 8000
-                
-                predictions.append({
-                    'zone': zone,
-                    'price_1h': base_price + np.random.normal(0, 5),
-                    'price_4h': base_price + np.random.normal(0, 8),
-                    'price_24h': base_price + np.random.normal(0, 12),
-                    'load_1h': base_load + np.random.normal(0, 200),
-                    'congestion_risk': np.random.uniform(0.1, 0.3),
-                    'confidence': np.random.uniform(0.7, 0.9)
-                })
-            
-            # Trading opportunities
-            opportunities = []
-            for i in range(5):
-                zone_from = np.random.choice(self.zones)
-                zone_to = np.random.choice([z for z in self.zones if z != zone_from])
-                spread = np.random.uniform(5, 25)
-                volume = np.random.uniform(100, 1000)
-                profit = spread * volume * 0.7
-                
-                opportunities.append({
-                    'type': np.random.choice(['spatial_arbitrage', 'temporal_arbitrage']),
-                    'zone_from': zone_from,
-                    'zone_to': zone_to,
-                    'spread': spread,
-                    'volume': volume,
-                    'profit': profit,
-                    'risk': np.random.uniform(0.2, 0.8),
-                    'confidence': np.random.uniform(0.6, 0.9)
-                })
-            
-            # Market alerts
-            alerts = []
-            high_price_zones = [z for z in zone_data if z['rt_price'] > 100]
-            for zone_info in high_price_zones[:3]:
-                severity = 'CRITICAL' if zone_info['rt_price'] > 200 else 'HIGH' if zone_info['rt_price'] > 150 else 'MEDIUM'
-                alerts.append({
-                    'type': 'price_spike',
-                    'severity': severity,
-                    'zone': zone_info['zone'],
-                    'message': f"Price spike in {zone_info['zone']}: ${zone_info['rt_price']:.2f}/MWh",
-                    'value': zone_info['rt_price'],
-                    'impact': zone_info['rt_price'] * 100,
-                    'action': 'Consider demand response or supply actions'
-                })
-            
-            # Add congestion alerts
-            alerts.append({
-                'type': 'congestion',
-                'severity': 'HIGH',
-                'zone': 'PJM Interface',
-                'message': 'Interface congestion: PJM at 95.2%',
-                'value': 95.2,
-                'impact': 5000,
-                'action': 'Monitor for arbitrage opportunities'
+            zone_data.append({
+                'zone': zone,
+                'rt_price': round(base_price, 2),
+                'da_price': round(da_price, 2),
+                'congestion': round(congestion, 2),
+                'load': round(load, 0),
+                'opportunity': opportunity
             })
             
-            # Add trading opportunity alert
-            best_opp = max(opportunities, key=lambda x: x['profit'])
-            alerts.append({
-                'type': 'trading_opportunity',
-                'severity': 'MEDIUM',
-                'zone': best_opp['zone_from'],
-                'message': f"High profit {best_opp['type']}: {best_opp['zone_from']}→{best_opp['zone_to']} (${best_opp['profit']:.0f})",
-                'value': best_opp['profit'],
-                'impact': best_opp['profit'],
-                'action': 'Execute trade or hedge position'
+            total_load += load
+            total_price += base_price
+        
+        avg_price = total_price / len(self.zones)
+        
+        return {
+            'zones': zone_data,
+            'portfolio': {
+                'total_pnl': random.randint(25000, 85000),
+                'system_load': round(total_load, 0),
+                'avg_price': round(avg_price, 2),
+                'active_positions': random.randint(18, 28)
+            }
+        }
+    
+    def generate_opportunities(self):
+        opportunities = []
+        
+        opportunity_types = [
+            ('spatial_arbitrage', 'N.Y.C.', 'CENTRL', random.uniform(8, 20), random.uniform(300, 800)),
+            ('temporal_arbitrage', 'LONGIL', 'LONGIL', random.uniform(5, 15), random.uniform(200, 600)),
+            ('spatial_arbitrage', 'DUNWOD', 'NORTH', random.uniform(10, 25), random.uniform(150, 500)),
+            ('congestion_play', 'CAPITL', 'GENESE', random.uniform(12, 18), random.uniform(250, 650))
+        ]
+        
+        for opp_type, zone_from, zone_to, spread, volume in opportunity_types:
+            profit = spread * volume * random.uniform(0.6, 0.9)
+            risk = random.uniform(0.2, 0.8)
+            
+            opportunities.append({
+                'type': opp_type,
+                'zone_from': zone_from,
+                'zone_to': zone_to,
+                'spread': round(spread, 2),
+                'volume': round(volume, 0),
+                'profit': round(profit, 0),
+                'risk': round(risk, 2)
             })
+        
+        return sorted(opportunities, key=lambda x: x['profit'], reverse=True)
+    
+    def generate_alerts(self):
+        alerts = []
+        
+        alert_templates = [
+            ('CRITICAL', 'Price spike in {zone} - ${price:.2f}/MWh', 'Consider demand response activation'),
+            ('HIGH', 'Interface congestion - {interface} at {util:.0f}%', 'Monitor for arbitrage opportunities'),
+            ('MEDIUM', 'Wind forecast updated - {change:+.0f}% change', 'Adjust renewable energy positions'),
+            ('HIGH', 'Load forecast deviation in {zone} - {deviation:+.1f}%', 'Review generation commitments'),
+            ('MEDIUM', 'Virtual trading opportunity in {zone}', 'Execute hedge positions')
+        ]
+        
+        for severity, message_template, action in alert_templates[:3]:  # Show 3 alerts
+            if 'zone' in message_template:
+                zone = random.choice(self.zones)
+                if 'price' in message_template:
+                    price = random.uniform(150, 300)
+                    message = message_template.format(zone=zone, price=price)
+                elif 'deviation' in message_template:
+                    deviation = random.uniform(-15, 20)
+                    message = message_template.format(zone=zone, deviation=deviation)
+                else:
+                    message = message_template.format(zone=zone)
+            elif 'interface' in message_template:
+                interface = random.choice(['PJM', 'NE', 'HQ', 'OH'])
+                util = random.uniform(85, 98)
+                message = message_template.format(interface=interface, util=util)
+            elif 'change' in message_template:
+                change = random.uniform(-25, 35)
+                message = message_template.format(change=change)
+            else:
+                message = message_template
             
-            # Generation mix
-            generation = [
-                {'fuel': 'Natural Gas', 'generation': 12000 + np.random.normal(0, 1000), 'capacity_factor': 0.48 + np.random.normal(0, 0.1), 'marginal_cost': 35 + np.random.normal(0, 5)},
-                {'fuel': 'Nuclear', 'generation': 5200 + np.random.normal(0, 200), 'capacity_factor': 0.96 + np.random.normal(0, 0.02), 'marginal_cost': 12 + np.random.normal(0, 2)},
-                {'fuel': 'Hydro', 'generation': 2800 + np.random.normal(0, 400), 'capacity_factor': 0.62 + np.random.normal(0, 0.1), 'marginal_cost': 0},
-                {'fuel': 'Wind', 'generation': 1800 + np.random.normal(0, 600), 'capacity_factor': 0.43 + np.random.normal(0, 0.15), 'marginal_cost': 0},
-                {'fuel': 'Solar', 'generation': 800 + np.random.normal(0, 300), 'capacity_factor': 0.38 + np.random.normal(0, 0.2), 'marginal_cost': 0},
-                {'fuel': 'Coal', 'generation': 400 + np.random.normal(0, 100), 'capacity_factor': 0.33 + np.random.normal(0, 0.1), 'marginal_cost': 45 + np.random.normal(0, 8)},
-                {'fuel': 'Oil', 'generation': 200 + np.random.normal(0, 50), 'capacity_factor': 0.25 + np.random.normal(0, 0.1), 'marginal_cost': 85 + np.random.normal(0, 10)}
-            ]
-            
-            # Interface flows
-            interfaces = [
-                {'name': 'PJM', 'flow': 750 + np.random.normal(0, 100), 'limit': 1000, 'utilization': 75 + np.random.normal(0, 10), 'congestion_cost': np.random.uniform(0, 50), 'shadow_price': np.random.uniform(0, 60)},
-                {'name': 'NE', 'flow': 520 + np.random.normal(0, 80), 'limit': 800, 'utilization': 65 + np.random.normal(0, 10), 'congestion_cost': np.random.uniform(0, 30), 'shadow_price': np.random.uniform(0, 40)},
-                {'name': 'HQ', 'flow': 980 + np.random.normal(0, 120), 'limit': 1200, 'utilization': 82 + np.random.normal(0, 8), 'congestion_cost': np.random.uniform(0, 40), 'shadow_price': np.random.uniform(0, 50)},
-                {'name': 'OH', 'flow': 270 + np.random.normal(0, 50), 'limit': 600, 'utilization': 45 + np.random.normal(0, 15), 'congestion_cost': np.random.uniform(0, 20), 'shadow_price': np.random.uniform(0, 25)},
-                {'name': 'Central East', 'flow': 1100 + np.random.normal(0, 150), 'limit': 2000, 'utilization': 55 + np.random.normal(0, 12), 'congestion_cost': np.random.uniform(0, 35), 'shadow_price': np.random.uniform(0, 45)},
-                {'name': 'UPNY SENY', 'flow': 1700 + np.random.normal(0, 200), 'limit': 2500, 'utilization': 68 + np.random.normal(0, 10), 'congestion_cost': np.random.uniform(0, 45), 'shadow_price': np.random.uniform(0, 55)}
-            ]
-            
-            # Portfolio summary
-            portfolio = {
-                'total_pnl': np.random.normal(45000, 15000),
-                'daily_change': np.random.normal(0.12, 0.05),
-                'active_positions': np.random.randint(15, 30),
-                'profitable_positions': np.random.randint(8, 20),
-                'at_risk_positions': np.random.randint(0, 5),
-                'avg_price': np.random.normal(42, 8),
-                'system_load': sum(z['load'] for z in zone_data),
-                'load_change': np.random.normal(0.03, 0.02)
-            }
-            
-            # Store all data
-            self.current_data = {
-                'zones': zone_data,
-                'predictions': predictions,
-                'opportunities': opportunities,
-                'alerts': alerts,
-                'generation': generation,
-                'interfaces': interfaces,
-                'portfolio': portfolio,
-                'last_update': current_time.isoformat()
-            }
-            
-            self.last_update = current_time
-            return True
-            
-        except Exception as e:
-            print(f"Error generating data: {e}")
-            return False
+            alerts.append({
+                'severity': severity,
+                'message': message,
+                'action': action
+            })
+        
+        return alerts
 
-# Initialize collector
-collector = SimplifiedNYISOCollector()
+# Initialize data generator
+data_generator = StandaloneNYISOData()
 
-def background_data_collection():
-    """Background data collection without database"""
-    while True:
-        try:
-            collector.generate_realistic_data()
-            time.sleep(180)  # Update every 3 minutes
-        except Exception as e:
-            print(f"Background collection error: {e}")
-            time.sleep(60)
-
-# Start background thread
-if not collector.is_collecting:
-    collector.is_collecting = True
-    thread = threading.Thread(target=background_data_collection, daemon=True)
-    thread.start()
-
-# HTML Template
+# HTML Template - Complete standalone version
 dashboard_html = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -479,10 +395,9 @@ dashboard_html = '''
             background: rgba(16, 185, 129, 0.2);
             border: 1px solid #10b981;
             color: #10b981;
-            padding: 10px 15px;
+            padding: 10px;
             border-radius: 6px;
             margin: 10px 0;
-            text-align: center;
         }
         
         @media (max-width: 1200px) {
@@ -510,7 +425,7 @@ dashboard_html = '''
             <div style="display: flex; align-items: center; gap: 15px;">
                 <span class="status-indicator status-online"></span>
                 <span>Live Market Data</span>
-                <button class="btn" onclick="refreshAllData()">🔄 Refresh</button>
+                <button class="btn" onclick="refreshAllData()">🔄 REFRESH</button>
             </div>
         </div>
     </div>
@@ -618,26 +533,6 @@ dashboard_html = '''
                     <canvas id="predictionChart"></canvas>
                 </div>
             </div>
-            
-            <div class="table-container">
-                <h3>🔮 Multi-Horizon Predictions</h3>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Zone</th>
-                            <th>1H Price</th>
-                            <th>4H Price</th>
-                            <th>24H Price</th>
-                            <th>1H Load</th>
-                            <th>Congestion Risk</th>
-                            <th>Confidence</th>
-                        </tr>
-                    </thead>
-                    <tbody id="predictions-table-body">
-                        <!-- Dynamic content -->
-                    </tbody>
-                </table>
-            </div>
         </div>
 
         <!-- Advanced Analytics Tab -->
@@ -660,6 +555,12 @@ dashboard_html = '''
 
     <script>
         let charts = {};
+        let currentData = {
+            zones: [],
+            opportunities: [],
+            alerts: [],
+            portfolio: {}
+        };
         
         function showTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(tab => {
@@ -697,109 +598,55 @@ dashboard_html = '''
                 charts.priceComparison.destroy();
             }
             
-            // Use real data from API
-            fetch('/api/zone-data')
-                .then(response => response.json())
-                .then(data => {
-                    const zones = data.zones.map(z => z.zone);
-                    const rtPrices = data.zones.map(z => z.rt_price);
-                    const daPrices = data.zones.map(z => z.da_price);
-                    
-                    charts.priceComparison = new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: zones,
-                            datasets: [{
-                                label: 'Real-Time Price',
-                                data: rtPrices,
-                                borderColor: '#3b82f6',
-                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                                tension: 0.4,
-                                fill: true
-                            }, {
-                                label: 'Day-Ahead Price',
-                                data: daPrices,
-                                borderColor: '#10b981',
-                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                                tension: 0.4,
-                                fill: false
-                            }]
+            const rtPrices = currentData.zones.map(zone => zone.rt_price);
+            const daPrices = currentData.zones.map(zone => zone.da_price);
+            const labels = currentData.zones.map(zone => zone.zone);
+            
+            charts.priceComparison = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Real-Time Price',
+                        data: rtPrices,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'Day-Ahead Price',
+                        data: daPrices,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#fff' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#475569' }
                         },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    labels: { color: '#fff' }
-                                }
-                            },
-                            scales: {
-                                x: {
-                                    ticks: { color: '#94a3b8' },
-                                    grid: { color: '#475569' }
-                                },
-                                y: {
-                                    ticks: { color: '#94a3b8' },
-                                    grid: { color: '#475569' },
-                                    title: {
-                                        display: true,
-                                        text: 'Price ($/MWh)',
-                                        color: '#94a3b8'
-                                    }
-                                }
+                        y: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#475569' },
+                            title: {
+                                display: true,
+                                text: 'Price ($/MWh)',
+                                color: '#94a3b8'
                             }
                         }
-                    });
-                })
-                .catch(error => {
-                    console.error('Error loading price data:', error);
-                    // Fallback with sample data
-                    charts.priceComparison = new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: ['CAPITL', 'CENTRL', 'DUNWOD', 'GENESE', 'HUD VL', 'LONGIL', 'MHK VL', 'MILLWD', 'N.Y.C.', 'NORTH', 'WEST'],
-                            datasets: [{
-                                label: 'Real-Time Price',
-                                data: [38.5, 41.2, 52.3, 35.8, 48.7, 58.2, 33.9, 47.1, 62.4, 31.5, 39.8],
-                                borderColor: '#3b82f6',
-                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                                tension: 0.4,
-                                fill: true
-                            }, {
-                                label: 'Day-Ahead Price',
-                                data: [42.1, 39.8, 48.9, 38.2, 52.1, 54.7, 36.4, 43.8, 58.9, 34.2, 42.3],
-                                borderColor: '#10b981',
-                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                                tension: 0.4,
-                                fill: false
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    labels: { color: '#fff' }
-                                }
-                            },
-                            scales: {
-                                x: {
-                                    ticks: { color: '#94a3b8' },
-                                    grid: { color: '#475569' }
-                                },
-                                y: {
-                                    ticks: { color: '#94a3b8' },
-                                    grid: { color: '#475569' },
-                                    title: {
-                                        display: true,
-                                        text: 'Price ($/MWh)',
-                                        color: '#94a3b8'
-                                    }
-                                }
-                            }
-                        }
-                    });
-                });
+                    }
+                }
+            });
         }
         
         function initOpportunityChart() {
@@ -810,18 +657,18 @@ dashboard_html = '''
                 charts.opportunity.destroy();
             }
             
+            const opportunityData = currentData.opportunities.map(opp => ({
+                x: opp.spread,
+                y: opp.profit,
+                r: Math.max(4, Math.min(15, opp.volume / 100))
+            }));
+            
             charts.opportunity = new Chart(ctx, {
                 type: 'scatter',
                 data: {
                     datasets: [{
                         label: 'Trading Opportunities',
-                        data: [
-                            {x: 15.6, y: 8420, r: 8},
-                            {x: 12.3, y: 5230, r: 6},
-                            {x: 45.0, y: 3180, r: 4},
-                            {x: 8.7, y: 2100, r: 5},
-                            {x: 22.1, y: 6750, r: 7}
-                        ],
+                        data: opportunityData,
                         backgroundColor: 'rgba(59, 130, 246, 0.6)',
                         borderColor: '#3b82f6'
                     }]
@@ -1030,9 +877,8 @@ dashboard_html = '''
                 const response = await fetch('/api/zone-data');
                 const data = await response.json();
                 
-                if (!data.zones) {
-                    throw new Error('No zone data received');
-                }
+                currentData.zones = data.zones;
+                currentData.portfolio = data.portfolio;
                 
                 const tbody = document.getElementById('zone-data-body');
                 tbody.innerHTML = '';
@@ -1041,77 +887,43 @@ dashboard_html = '''
                     const row = document.createElement('tr');
                     const spread = zone.rt_price - zone.da_price;
                     const spreadClass = spread > 5 ? 'price-high' : spread < -5 ? 'price-low' : 'price-medium';
-                    const rtClass = zone.rt_price > 100 ? 'price-high' : zone.rt_price > 50 ? 'price-medium' : 'price-low';
+                    const rtClass = zone.rt_price > 60 ? 'price-high' : zone.rt_price > 45 ? 'price-medium' : 'price-low';
                     
                     row.innerHTML = `
                         <td><strong>${zone.zone}</strong></td>
                         <td class="price-cell ${rtClass}">${zone.rt_price.toFixed(2)}</td>
                         <td class="price-cell">${zone.da_price.toFixed(2)}</td>
                         <td class="price-cell ${spreadClass}">${spread.toFixed(2)}</td>
-                        <td>${zone.load.toFixed(0)} MW</td>
+                        <td>${zone.load.toLocaleString()} MW</td>
                         <td>${zone.congestion.toFixed(2)}</td>
-                        <td>${zone.opportunity}</td>
+                        <td><span class="opportunity-${zone.opportunity.toLowerCase()}">${zone.opportunity}</span></td>
                     `;
                     tbody.appendChild(row);
                 });
                 
                 // Update dashboard metrics
-                updateDashboardMetrics(data);
+                updateDashboardMetrics(data.portfolio);
                 
+                return true;
             } catch (error) {
                 console.error('Error updating zone data:', error);
-                // Use fallback data
-                updateZoneDataFallback();
+                return false;
             }
         }
         
-        function updateZoneDataFallback() {
-            const tbody = document.getElementById('zone-data-body');
-            tbody.innerHTML = '';
-            
-            const fallbackZones = [
-                {zone: 'CAPITL', rt_price: 38.5, da_price: 42.1, congestion: 2.3, load: 1850, opportunity: 'Medium'},
-                {zone: 'CENTRL', rt_price: 41.2, da_price: 39.8, congestion: 3.1, load: 1920, opportunity: 'Low'},
-                {zone: 'DUNWOD', rt_price: 52.3, da_price: 48.9, congestion: 8.2, load: 3150, opportunity: 'High'},
-                {zone: 'GENESE', rt_price: 35.8, da_price: 38.2, congestion: 1.8, load: 1750, opportunity: 'Low'},
-                {zone: 'HUD VL', rt_price: 48.7, da_price: 52.1, congestion: 6.5, load: 2880, opportunity: 'Medium'},
-                {zone: 'LONGIL', rt_price: 58.2, da_price: 54.7, congestion: 12.1, load: 3420, opportunity: 'High'},
-                {zone: 'MHK VL', rt_price: 33.9, da_price: 36.4, congestion: 1.2, load: 1680, opportunity: 'Low'},
-                {zone: 'MILLWD', rt_price: 47.1, da_price: 43.8, congestion: 5.8, load: 2650, opportunity: 'Medium'},
-                {zone: 'N.Y.C.', rt_price: 62.4, da_price: 58.9, congestion: 15.2, load: 8750, opportunity: 'High'},
-                {zone: 'NORTH', rt_price: 31.5, da_price: 34.2, congestion: 0.8, load: 1580, opportunity: 'Low'},
-                {zone: 'WEST', rt_price: 39.8, da_price: 42.3, congestion: 2.9, load: 1890, opportunity: 'Low'}
-            ];
-            
-            fallbackZones.forEach(zone => {
-                const row = document.createElement('tr');
-                const spread = zone.rt_price - zone.da_price;
-                const spreadClass = spread > 5 ? 'price-high' : spread < -5 ? 'price-low' : 'price-medium';
-                const rtClass = zone.rt_price > 100 ? 'price-high' : zone.rt_price > 50 ? 'price-medium' : 'price-low';
+        function updateDashboardMetrics(portfolio) {
+            if (portfolio) {
+                const pnlElement = document.getElementById('total-pnl');
+                const pnl = portfolio.total_pnl;
+                pnlElement.textContent = (pnl >= 0 ? '+
+                 : '-
+                ) + Math.abs(pnl).toLocaleString();
+                pnlElement.className = 'metric-large ' + (pnl >= 0 ? 'profit' : 'loss');
                 
-                row.innerHTML = `
-                    <td><strong>${zone.zone}</strong></td>
-                    <td class="price-cell ${rtClass}">${zone.rt_price.toFixed(2)}</td>
-                    <td class="price-cell">${zone.da_price.toFixed(2)}</td>
-                    <td class="price-cell ${spreadClass}">${spread.toFixed(2)}</td>
-                    <td>${zone.load.toFixed(0)} MW</td>
-                    <td>${zone.congestion.toFixed(2)}</td>
-                    <td>${zone.opportunity}</td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
-        
-        function updateDashboardMetrics(data) {
-            if (data.portfolio) {
-                document.getElementById('total-pnl').textContent = 
-                    (data.portfolio.total_pnl >= 0 ? '+ : '-) + Math.abs(data.portfolio.total_pnl).toLocaleString();
-                document.getElementById('system-load').textContent = 
-                    Math.round(data.portfolio.system_load).toLocaleString() + ' MW';
-                document.getElementById('avg-price').textContent = 
-                    ' + data.portfolio.avg_price.toFixed(2) + '/MWh';
-                document.getElementById('active-positions').textContent = 
-                    data.portfolio.active_positions;
+                document.getElementById('system-load').textContent = Math.round(portfolio.system_load).toLocaleString() + ' MW';
+                document.getElementById('avg-price').textContent = '
+                 + portfolio.avg_price.toFixed(2) + '/MWh';
+                document.getElementById('active-positions').textContent = portfolio.active_positions;
             }
         }
         
@@ -1120,21 +932,27 @@ dashboard_html = '''
                 const response = await fetch('/api/opportunities');
                 const data = await response.json();
                 
+                currentData.opportunities = data.opportunities;
+                
                 const opportunitiesList = document.getElementById('opportunities-list');
                 opportunitiesList.innerHTML = '';
                 
                 data.opportunities.slice(0, 3).forEach(opp => {
                     const oppDiv = document.createElement('div');
                     oppDiv.className = 'opportunity-item';
+                    const riskLevel = opp.risk < 0.4 ? 'Low' : opp.risk < 0.7 ? 'Medium' : 'High';
                     oppDiv.innerHTML = `
-                        <strong>${opp.type.replace('_', ' ').toUpperCase()}: ${opp.zone_from} → ${opp.zone_to}</strong>
-                        <div class="opportunity-profit">Profit Potential: ${Math.round(opp.profit).toLocaleString()}</div>
-                        <div>Spread: ${opp.spread.toFixed(2)}/MWh | Volume: ${Math.round(opp.volume)} MW | Risk: ${opp.risk < 0.3 ? 'Low' : opp.risk < 0.7 ? 'Medium' : 'High'}</div>
+                        <strong>${opp.type.replace(/_/g, ' ').toUpperCase()}: ${opp.zone_from} → ${opp.zone_to}</strong>
+                        <div class="opportunity-profit">Profit Potential: ${opp.profit.toLocaleString()}</div>
+                        <div>Spread: ${opp.spread.toFixed(2)}/MWh | Volume: ${opp.volume.toLocaleString()} MW | Risk: ${riskLevel}</div>
                     `;
                     opportunitiesList.appendChild(oppDiv);
                 });
+                
+                return true;
             } catch (error) {
                 console.error('Error updating opportunities:', error);
+                return false;
             }
         }
         
@@ -1142,6 +960,8 @@ dashboard_html = '''
             try {
                 const response = await fetch('/api/alerts');
                 const data = await response.json();
+                
+                currentData.alerts = data.alerts;
                 
                 const alertsList = document.getElementById('alerts-list');
                 alertsList.innerHTML = '';
@@ -1155,8 +975,11 @@ dashboard_html = '''
                     `;
                     alertsList.appendChild(alertDiv);
                 });
+                
+                return true;
             } catch (error) {
                 console.error('Error updating alerts:', error);
+                return false;
             }
         }
         
@@ -1164,37 +987,54 @@ dashboard_html = '''
             const refreshMessage = document.getElementById('refresh-message');
             refreshMessage.innerHTML = '<div class="success-message">🔄 Refreshing market data...</div>';
             
+            // Call refresh API
+            fetch('/api/refresh')
+                .then(response => response.json())
+                .then(() => {
+                    return Promise.all([
+                        updateZoneData(),
+                        updateOpportunities(),
+                        updateAlerts()
+                    ]);
+                })
+                .then(() => {
+                    const activeTab = document.querySelector('.nav-tab.active').textContent.toLowerCase();
+                    if (activeTab.includes('overview')) {
+                        initPriceComparisonChart();
+                    } else if (activeTab.includes('trading')) {
+                        initOpportunityChart();
+                    }
+                    refreshMessage.innerHTML = '<div class="success-message">✅ Market data refreshed successfully!</div>';
+                    setTimeout(() => {
+                        refreshMessage.innerHTML = '';
+                    }, 3000);
+                })
+                .catch(error => {
+                    console.error('Error refreshing data:', error);
+                    refreshMessage.innerHTML = '<div class="success-message">⚠️ Connection issue - data may be cached</div>';
+                    setTimeout(() => {
+                        refreshMessage.innerHTML = '';
+                    }, 5000);
+                });
+        }
+        
+        // Auto-refresh every 3 minutes
+        setInterval(refreshAllData, 180000);
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load initial data
             Promise.all([
                 updateZoneData(),
                 updateOpportunities(),
                 updateAlerts()
             ]).then(() => {
-                const activeTab = document.querySelector('.nav-tab.active').textContent.toLowerCase();
-                if (activeTab.includes('overview')) {
-                    initPriceComparisonChart();
-                }
-                refreshMessage.innerHTML = '<div class="success-message">✅ Market data refreshed successfully!</div>';
-                setTimeout(() => {
-                    refreshMessage.innerHTML = '';
-                }, 3000);
+                initializeCharts('overview');
             }).catch(error => {
-                console.error('Error refreshing data:', error);
-                refreshMessage.innerHTML = '<div class="success-message">⚠️ Using fallback data - some features may be limited</div>';
-                setTimeout(() => {
-                    refreshMessage.innerHTML = '';
-                }, 5000);
+                console.error('Error loading initial data:', error);
+                // Still initialize charts with empty data
+                initializeCharts('overview');
             });
-        }
-        
-        // Auto-refresh every 2 minutes
-        setInterval(refreshAllData, 120000);
-        
-        // Initialize on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            initializeCharts('overview');
-            updateZoneData();
-            updateOpportunities();
-            updateAlerts();
         });
     </script>
 </body>
@@ -1208,97 +1048,70 @@ def dashboard():
 
 @app.route('/api/zone-data')
 def get_zone_data():
-    # Return data directly from collector without database dependency
-    if hasattr(collector, 'current_data') and collector.current_data.get('zones'):
-        return jsonify({
-            'zones': collector.current_data['zones'],
-            'portfolio': collector.current_data.get('portfolio', {})
-        })
-    else:
-        # Fallback data if collector hasn't generated data yet
-        return jsonify({
-            'zones': [
-                {'zone': 'CAPITL', 'rt_price': 38.5, 'da_price': 42.1, 'congestion': 2.3, 'load': 1850, 'opportunity': 'Medium'},
-                {'zone': 'CENTRL', 'rt_price': 41.2, 'da_price': 39.8, 'congestion': 3.1, 'load': 1920, 'opportunity': 'Low'},
-                {'zone': 'DUNWOD', 'rt_price': 52.3, 'da_price': 48.9, 'congestion': 8.2, 'load': 3150, 'opportunity': 'High'},
-                {'zone': 'GENESE', 'rt_price': 35.8, 'da_price': 38.2, 'congestion': 1.8, 'load': 1750, 'opportunity': 'Low'},
-                {'zone': 'HUD VL', 'rt_price': 48.7, 'da_price': 52.1, 'congestion': 6.5, 'load': 2880, 'opportunity': 'Medium'},
-                {'zone': 'LONGIL', 'rt_price': 58.2, 'da_price': 54.7, 'congestion': 12.1, 'load': 3420, 'opportunity': 'High'},
-                {'zone': 'MHK VL', 'rt_price': 33.9, 'da_price': 36.4, 'congestion': 1.2, 'load': 1680, 'opportunity': 'Low'},
-                {'zone': 'MILLWD', 'rt_price': 47.1, 'da_price': 43.8, 'congestion': 5.8, 'load': 2650, 'opportunity': 'Medium'},
-                {'zone': 'N.Y.C.', 'rt_price': 62.4, 'da_price': 58.9, 'congestion': 15.2, 'load': 8750, 'opportunity': 'High'},
-                {'zone': 'NORTH', 'rt_price': 31.5, 'da_price': 34.2, 'congestion': 0.8, 'load': 1580, 'opportunity': 'Low'},
-                {'zone': 'WEST', 'rt_price': 39.8, 'da_price': 42.3, 'congestion': 2.9, 'load': 1890, 'opportunity': 'Low'}
-            ],
-            'portfolio': {
-                'total_pnl': 47250,
-                'system_load': 30457,
-                'avg_price': 45.2,
-                'active_positions': 23
-            }
-        })
+    try:
+        data = data_generator.generate_zone_data()
+        return jsonify(data)
+    except Exception as e:
+        print(f"Error generating zone data: {e}")
+        return jsonify({'error': 'Data generation failed'}), 500
 
 @app.route('/api/opportunities')
 def get_opportunities():
-    if hasattr(collector, 'current_data') and collector.current_data.get('opportunities'):
-        return jsonify({'opportunities': collector.current_data['opportunities']})
-    else:
-        return jsonify({'opportunities': [
-            {'type': 'spatial_arbitrage', 'zone_from': 'N.Y.C.', 'zone_to': 'LONGIL', 'spread': 15.6, 'volume': 540, 'profit': 8420, 'risk': 0.3},
-            {'type': 'temporal_arbitrage', 'zone_from': 'CAPITL', 'zone_to': 'CAPITL', 'spread': 12.3, 'volume': 425, 'profit': 5230, 'risk': 0.5},
-            {'type': 'spatial_arbitrage', 'zone_from': 'DUNWOD', 'zone_to': 'CENTRL', 'spread': 8.7, 'volume': 320, 'profit': 2780, 'risk': 0.2}
-        ]})
+    try:
+        opportunities = data_generator.generate_opportunities()
+        return jsonify({'opportunities': opportunities})
+    except Exception as e:
+        print(f"Error generating opportunities: {e}")
+        return jsonify({'error': 'Opportunities generation failed'}), 500
 
 @app.route('/api/alerts')
 def get_alerts():
-    if hasattr(collector, 'current_data') and collector.current_data.get('alerts'):
-        return jsonify({'alerts': collector.current_data['alerts']})
-    else:
-        return jsonify({'alerts': [
-            {'severity': 'CRITICAL', 'message': 'Price spike in NYC - $287.50/MWh', 'action': 'Consider demand response activation'},
-            {'severity': 'HIGH', 'message': 'Interface congestion - PJM at 95%', 'action': 'Monitor for arbitrage opportunities'},
-            {'severity': 'MEDIUM', 'message': 'Wind forecast updated - 15% increase', 'action': 'Adjust renewable energy positions'}
-        ]})
+    try:
+        alerts = data_generator.generate_alerts()
+        return jsonify({'alerts': alerts})
+    except Exception as e:
+        print(f"Error generating alerts: {e}")
+        return jsonify({'error': 'Alerts generation failed'}), 500
 
 @app.route('/api/refresh')
 def refresh_data():
-    success = collector.generate_realistic_data()
-    return jsonify({
-        'success': success,
-        'message': 'Data refreshed successfully' if success else 'Refresh failed, using cached data',
-        'timestamp': datetime.now().isoformat()
-    })
+    try:
+        # Simulate data refresh
+        time.sleep(0.5)  # Small delay to simulate processing
+        return jsonify({
+            'success': True,
+            'message': 'Data refreshed successfully',
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        print(f"Error refreshing data: {e}")
+        return jsonify({'error': 'Refresh failed'}), 500
 
 @app.route('/health')
 def health():
     return jsonify({
         'status': 'healthy',
         'service': 'NYISO Enterprise Trading Platform',
-        'version': '4.0.0',
-        'zones_monitored': len(collector.zones),
-        'data_available': bool(collector.current_data),
-        'last_update': collector.last_update.isoformat() if hasattr(collector, 'last_update') else None,
-        'capabilities': [
-            'Real-time market data simulation',
+        'version': '5.0.0 - Standalone',
+        'features': [
+            'Real-time market simulation',
             'Trading opportunity analysis', 
-            'Price forecasting',
-            'Market alerts',
-            'Portfolio tracking'
-        ]
+            'Dynamic price forecasting',
+            'Market alerts system',
+            'Portfolio tracking',
+            'Multi-zone monitoring'
+        ],
+        'zones_monitored': len(data_generator.zones),
+        'timestamp': datetime.now().isoformat()
     })
 
 if __name__ == '__main__':
-    print("🚀 Starting NYISO Enterprise Trading Platform V4...")
-    print("📊 Dashboard: Cloud-optimized version")
-    print("🔄 Data collection: In-memory storage")
-    print("💾 Database: Removed SQLite dependency")
-    print("☁️ Cloud-ready: No file system dependencies")
-    print("⚡ All NYISO zones: Simulated with realistic data")
-    print("🎯 Ready for deployment...")
+    print("🚀 Starting NYISO Enterprise Trading Platform V5...")
+    print("💡 Standalone Version - No Dependencies")
+    print("📊 Dashboard: Fully self-contained")
+    print("🔄 Data: Dynamic generation")
+    print("⚡ All NYISO zones: Real-time simulation")
+    print("🎯 Ready for immediate use...")
     
-    # Generate initial data
-    collector.generate_realistic_data()
-    
-    # Start the app
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
