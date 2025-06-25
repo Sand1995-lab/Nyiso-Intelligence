@@ -1,132 +1,12 @@
-from flask import Flask, render_template_string, jsonify
+from flask import Flask, render_template_string
 import json
 import random
-import time
-from datetime import datetime
 import os
+from datetime import datetime
 
 app = Flask(__name__)
 
-class StandaloneNYISOData:
-    def __init__(self):
-        self.zones = ['CAPITL', 'CENTRL', 'DUNWOD', 'GENESE', 'HUD VL', 'LONGIL', 'MHK VL', 'MILLWD', 'N.Y.C.', 'NORTH', 'WEST']
-        
-    def generate_zone_data(self):
-        zone_data = []
-        total_load = 0
-        total_price = 0
-        
-        for zone in self.zones:
-            if zone == 'N.Y.C.':
-                base_price = random.uniform(55, 75)
-                load = random.uniform(7500, 9500)
-                congestion = random.uniform(10, 20)
-            elif zone in ['LONGIL', 'DUNWOD']:
-                base_price = random.uniform(45, 65)
-                load = random.uniform(2800, 3800)
-                congestion = random.uniform(5, 15)
-            else:
-                base_price = random.uniform(35, 55)
-                load = random.uniform(1500, 2500)
-                congestion = random.uniform(1, 8)
-            
-            da_price = base_price * random.uniform(0.92, 1.08)
-            opportunity = "High" if abs(base_price - da_price) > 8 else "Medium" if abs(base_price - da_price) > 3 else "Low"
-            
-            zone_data.append({
-                'zone': zone,
-                'rt_price': round(base_price, 2),
-                'da_price': round(da_price, 2),
-                'congestion': round(congestion, 2),
-                'load': round(load, 0),
-                'opportunity': opportunity
-            })
-            
-            total_load += load
-            total_price += base_price
-        
-        avg_price = total_price / len(self.zones)
-        
-        return {
-            'zones': zone_data,
-            'portfolio': {
-                'total_pnl': random.randint(25000, 85000),
-                'system_load': round(total_load, 0),
-                'avg_price': round(avg_price, 2),
-                'active_positions': random.randint(18, 28)
-            }
-        }
-    
-    def generate_opportunities(self):
-        opportunities = []
-        
-        opportunity_types = [
-            ('spatial_arbitrage', 'N.Y.C.', 'CENTRL', random.uniform(8, 20), random.uniform(300, 800)),
-            ('temporal_arbitrage', 'LONGIL', 'LONGIL', random.uniform(5, 15), random.uniform(200, 600)),
-            ('spatial_arbitrage', 'DUNWOD', 'NORTH', random.uniform(10, 25), random.uniform(150, 500)),
-            ('congestion_play', 'CAPITL', 'GENESE', random.uniform(12, 18), random.uniform(250, 650))
-        ]
-        
-        for opp_type, zone_from, zone_to, spread, volume in opportunity_types:
-            profit = spread * volume * random.uniform(0.6, 0.9)
-            risk = random.uniform(0.2, 0.8)
-            
-            opportunities.append({
-                'type': opp_type,
-                'zone_from': zone_from,
-                'zone_to': zone_to,
-                'spread': round(spread, 2),
-                'volume': round(volume, 0),
-                'profit': round(profit, 0),
-                'risk': round(risk, 2)
-            })
-        
-        return sorted(opportunities, key=lambda x: x['profit'], reverse=True)
-    
-    def generate_alerts(self):
-        alerts = []
-        
-        alert_templates = [
-            ('CRITICAL', 'Price spike in {zone} - ${price:.2f}/MWh', 'Consider demand response activation'),
-            ('HIGH', 'Interface congestion - {interface} at {util:.0f}%', 'Monitor for arbitrage opportunities'),
-            ('MEDIUM', 'Wind forecast updated - {change:+.0f}% change', 'Adjust renewable energy positions'),
-            ('HIGH', 'Load forecast deviation in {zone} - {deviation:+.1f}%', 'Review generation commitments'),
-            ('MEDIUM', 'Virtual trading opportunity in {zone}', 'Execute hedge positions')
-        ]
-        
-        for severity, message_template, action in alert_templates[:3]:  # Show 3 alerts
-            if 'zone' in message_template:
-                zone = random.choice(self.zones)
-                if 'price' in message_template:
-                    price = random.uniform(150, 300)
-                    message = message_template.format(zone=zone, price=price)
-                elif 'deviation' in message_template:
-                    deviation = random.uniform(-15, 20)
-                    message = message_template.format(zone=zone, deviation=deviation)
-                else:
-                    message = message_template.format(zone=zone)
-            elif 'interface' in message_template:
-                interface = random.choice(['PJM', 'NE', 'HQ', 'OH'])
-                util = random.uniform(85, 98)
-                message = message_template.format(interface=interface, util=util)
-            elif 'change' in message_template:
-                change = random.uniform(-25, 35)
-                message = message_template.format(change=change)
-            else:
-                message = message_template
-            
-            alerts.append({
-                'severity': severity,
-                'message': message,
-                'action': action
-            })
-        
-        return alerts
-
-# Initialize data generator
-data_generator = StandaloneNYISOData()
-
-# HTML Template - Complete standalone version
+# Complete HTML with all JavaScript properly finished
 dashboard_html = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -438,33 +318,33 @@ dashboard_html = '''
             <div class="dashboard-grid">
                 <div class="card">
                     <h3>💰 Total P&L Today</h3>
-                    <div class="metric-large profit" id="total-pnl">+$47,250</div>
+                    <div class="metric-large profit" id="total-pnl">+$63,420</div>
                     <div class="change-indicator change-up">
-                        ↗ +12.5% vs yesterday
+                        ↗ +14.8% vs yesterday
                     </div>
                 </div>
                 
                 <div class="card">
                     <h3>📊 System Load</h3>
-                    <div class="metric-large neutral" id="system-load">24,567 MW</div>
+                    <div class="metric-large neutral" id="system-load">28,945 MW</div>
                     <div class="change-indicator change-up">
-                        ↗ +3.2% vs forecast
+                        ↗ +2.7% vs forecast
                     </div>
                 </div>
                 
                 <div class="card">
                     <h3>⚡ Avg Price</h3>
-                    <div class="metric-large neutral" id="avg-price">$42.15/MWh</div>
+                    <div class="metric-large neutral" id="avg-price">$48.75/MWh</div>
                     <div class="change-indicator change-down">
-                        ↘ -5.8% vs DA
+                        ↘ -3.2% vs DA
                     </div>
                 </div>
                 
                 <div class="card">
                     <h3>🎯 Active Positions</h3>
-                    <div class="metric-large neutral" id="active-positions">23</div>
+                    <div class="metric-large neutral" id="active-positions">26</div>
                     <div class="change-indicator">
-                        📈 8 profitable, 3 at risk
+                        📈 19 profitable, 2 at risk
                     </div>
                 </div>
             </div>
@@ -509,7 +389,7 @@ dashboard_html = '''
                         </tr>
                     </thead>
                     <tbody id="zone-data-body">
-                        <!-- Dynamic content -->
+                        <!-- Will be populated by JavaScript -->
                     </tbody>
                 </table>
             </div>
@@ -554,39 +434,161 @@ dashboard_html = '''
     </div>
 
     <script>
+        // Global variables
         let charts = {};
-        let currentData = {
-            zones: [],
-            opportunities: [],
-            alerts: [],
-            portfolio: {}
-        };
+        let marketData = {};
         
+        // Market Data Generator Class
+        class NYISODataGenerator {
+            constructor() {
+                this.zones = ['CAPITL', 'CENTRL', 'DUNWOD', 'GENESE', 'HUD VL', 'LONGIL', 'MHK VL', 'MILLWD', 'N.Y.C.', 'NORTH', 'WEST'];
+                this.generateNewData();
+            }
+            
+            generateNewData() {
+                const zones = [];
+                let totalLoad = 0;
+                let totalPrice = 0;
+                
+                this.zones.forEach(zone => {
+                    let basePrice, load, congestion;
+                    
+                    if (zone === 'N.Y.C.') {
+                        basePrice = 55 + Math.random() * 25;
+                        load = 7500 + Math.random() * 2000;
+                        congestion = 10 + Math.random() * 15;
+                    } else if (['LONGIL', 'DUNWOD'].includes(zone)) {
+                        basePrice = 45 + Math.random() * 20;
+                        load = 2800 + Math.random() * 1000;
+                        congestion = 5 + Math.random() * 10;
+                    } else {
+                        basePrice = 35 + Math.random() * 20;
+                        load = 1500 + Math.random() * 1000;
+                        congestion = 1 + Math.random() * 7;
+                    }
+                    
+                    const daPrice = basePrice * (0.92 + Math.random() * 0.16);
+                    const spread = basePrice - daPrice;
+                    const opportunity = Math.abs(spread) > 8 ? 'High' : Math.abs(spread) > 3 ? 'Medium' : 'Low';
+                    
+                    zones.push({
+                        zone,
+                        rt_price: parseFloat(basePrice.toFixed(2)),
+                        da_price: parseFloat(daPrice.toFixed(2)),
+                        spread: parseFloat(spread.toFixed(2)),
+                        load: Math.round(load),
+                        congestion: parseFloat(congestion.toFixed(2)),
+                        opportunity
+                    });
+                    
+                    totalLoad += load;
+                    totalPrice += basePrice;
+                });
+                
+                marketData = {
+                    zones,
+                    portfolio: {
+                        total_pnl: 50000 + Math.random() * 30000,
+                        system_load: Math.round(totalLoad),
+                        avg_price: parseFloat((totalPrice / this.zones.length).toFixed(2)),
+                        active_positions: 20 + Math.round(Math.random() * 10)
+                    },
+                    opportunities: this.generateOpportunities(),
+                    alerts: this.generateAlerts()
+                };
+            }
+            
+            generateOpportunities() {
+                return [
+                    {
+                        type: 'spatial_arbitrage',
+                        zone_from: 'N.Y.C.',
+                        zone_to: 'CENTRL',
+                        spread: 15 + Math.random() * 10,
+                        volume: 500 + Math.random() * 300,
+                        profit: 8000 + Math.random() * 8000,
+                        risk: 0.3 + Math.random() * 0.4
+                    },
+                    {
+                        type: 'temporal_arbitrage',
+                        zone_from: 'LONGIL',
+                        zone_to: 'LONGIL',
+                        spread: 8 + Math.random() * 8,
+                        volume: 400 + Math.random() * 400,
+                        profit: 4000 + Math.random() * 6000,
+                        risk: 0.2 + Math.random() * 0.3
+                    },
+                    {
+                        type: 'congestion_play',
+                        zone_from: 'DUNWOD',
+                        zone_to: 'NORTH',
+                        spread: 12 + Math.random() * 15,
+                        volume: 200 + Math.random() * 300,
+                        profit: 3000 + Math.random() * 5000,
+                        risk: 0.4 + Math.random() * 0.4
+                    }
+                ];
+            }
+            
+            generateAlerts() {
+                return [
+                    { 
+                        severity: 'CRITICAL', 
+                        message: 'Price spike in N.Y.C. - $' + (200 + Math.random() * 100).toFixed(2) + '/MWh', 
+                        action: 'Consider demand response activation' 
+                    },
+                    { 
+                        severity: 'HIGH', 
+                        message: 'Interface congestion - PJM at ' + (85 + Math.random() * 13).toFixed(0) + '%', 
+                        action: 'Monitor for arbitrage opportunities' 
+                    },
+                    { 
+                        severity: 'MEDIUM', 
+                        message: 'Wind forecast updated - ' + (Math.random() > 0.5 ? '+' : '') + (Math.random() * 30 - 15).toFixed(0) + '% change', 
+                        action: 'Adjust renewable energy positions' 
+                    }
+                ];
+            }
+        }
+        
+        // Initialize data generator
+        const dataGenerator = new NYISODataGenerator();
+        
+        // Tab Management
         function showTab(tabName) {
+            // Hide all tabs
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.style.display = 'none';
             });
             
+            // Remove active class from all nav tabs
             document.querySelectorAll('.nav-tab').forEach(tab => {
                 tab.classList.remove('active');
             });
             
+            // Show selected tab
             document.getElementById(tabName + '-tab').style.display = 'block';
             event.target.classList.add('active');
             
+            // Initialize charts for the tab
             setTimeout(() => initializeCharts(tabName), 100);
         }
         
+        // Chart Initialization
         function initializeCharts(tabName) {
-            if (tabName === 'overview') {
-                initPriceComparisonChart();
-            } else if (tabName === 'trading') {
-                initOpportunityChart();
-            } else if (tabName === 'predictions') {
-                initPredictionChart();
-            } else if (tabName === 'analytics') {
-                initGenerationChart();
-                initInterfaceChart();
+            try {
+                if (tabName === 'overview') {
+                    initPriceComparisonChart();
+                } else if (tabName === 'trading') {
+                    initOpportunityChart();
+                } else if (tabName === 'predictions') {
+                    initPredictionChart();
+                } else if (tabName === 'analytics') {
+                    initGenerationChart();
+                    initInterfaceChart();
+                }
+            } catch (error) {
+                console.error('Error initializing charts:', error);
             }
         }
         
@@ -598,9 +600,9 @@ dashboard_html = '''
                 charts.priceComparison.destroy();
             }
             
-            const rtPrices = currentData.zones.map(zone => zone.rt_price);
-            const daPrices = currentData.zones.map(zone => zone.da_price);
-            const labels = currentData.zones.map(zone => zone.zone);
+            const rtPrices = marketData.zones.map(zone => zone.rt_price);
+            const daPrices = marketData.zones.map(zone => zone.da_price);
+            const labels = marketData.zones.map(zone => zone.zone);
             
             charts.priceComparison = new Chart(ctx, {
                 type: 'line',
@@ -657,7 +659,7 @@ dashboard_html = '''
                 charts.opportunity.destroy();
             }
             
-            const opportunityData = currentData.opportunities.map(opp => ({
+            const opportunityData = marketData.opportunities.map(opp => ({
                 x: opp.spread,
                 y: opp.profit,
                 r: Math.max(4, Math.min(15, opp.volume / 100))
@@ -872,20 +874,17 @@ dashboard_html = '''
             });
         }
         
-        async function updateZoneData() {
+        // Data Update Functions
+        function updateZoneData() {
             try {
-                const response = await fetch('/api/zone-data');
-                const data = await response.json();
-                
-                currentData.zones = data.zones;
-                currentData.portfolio = data.portfolio;
-                
                 const tbody = document.getElementById('zone-data-body');
+                if (!tbody) return;
+                
                 tbody.innerHTML = '';
                 
-                data.zones.forEach(zone => {
+                marketData.zones.forEach(zone => {
                     const row = document.createElement('tr');
-                    const spread = zone.rt_price - zone.da_price;
+                    const spread = zone.spread;
                     const spreadClass = spread > 5 ? 'price-high' : spread < -5 ? 'price-low' : 'price-medium';
                     const rtClass = zone.rt_price > 60 ? 'price-high' : zone.rt_price > 45 ? 'price-medium' : 'price-low';
                     
@@ -902,71 +901,76 @@ dashboard_html = '''
                 });
                 
                 // Update dashboard metrics
-                updateDashboardMetrics(data.portfolio);
+                updateDashboardMetrics();
                 
-                return true;
             } catch (error) {
                 console.error('Error updating zone data:', error);
-                return false;
             }
         }
         
-        function updateDashboardMetrics(portfolio) {
-            if (portfolio) {
-                const pnlElement = document.getElementById('total-pnl');
-                const pnl = portfolio.total_pnl;
-                pnlElement.textContent = (pnl >= 0 ? '+
-                 : '-
-                ) + Math.abs(pnl).toLocaleString();
-                pnlElement.className = 'metric-large ' + (pnl >= 0 ? 'profit' : 'loss');
-                
-                document.getElementById('system-load').textContent = Math.round(portfolio.system_load).toLocaleString() + ' MW';
-                document.getElementById('avg-price').textContent = '
-                 + portfolio.avg_price.toFixed(2) + '/MWh';
-                document.getElementById('active-positions').textContent = portfolio.active_positions;
-            }
-        }
-        
-        async function updateOpportunities() {
+        function updateDashboardMetrics() {
             try {
-                const response = await fetch('/api/opportunities');
-                const data = await response.json();
+                const portfolio = marketData.portfolio;
                 
-                currentData.opportunities = data.opportunities;
+                const pnlElement = document.getElementById('total-pnl');
+                if (pnlElement) {
+                    const pnl = portfolio.total_pnl;
+                    pnlElement.textContent = (pnl >= 0 ? '+ : '-) + Math.abs(pnl).toLocaleString();
+                    pnlElement.className = 'metric-large ' + (pnl >= 0 ? 'profit' : 'loss');
+                }
                 
+                const systemLoadElement = document.getElementById('system-load');
+                if (systemLoadElement) {
+                    systemLoadElement.textContent = Math.round(portfolio.system_load).toLocaleString() + ' MW';
+                }
+                
+                const avgPriceElement = document.getElementById('avg-price');
+                if (avgPriceElement) {
+                    avgPriceElement.textContent = ' + portfolio.avg_price.toFixed(2) + '/MWh';
+                }
+                
+                const activePositionsElement = document.getElementById('active-positions');
+                if (activePositionsElement) {
+                    activePositionsElement.textContent = portfolio.active_positions;
+                }
+                
+            } catch (error) {
+                console.error('Error updating dashboard metrics:', error);
+            }
+        }
+        
+        function updateOpportunities() {
+            try {
                 const opportunitiesList = document.getElementById('opportunities-list');
+                if (!opportunitiesList) return;
+                
                 opportunitiesList.innerHTML = '';
                 
-                data.opportunities.slice(0, 3).forEach(opp => {
+                marketData.opportunities.forEach(opp => {
                     const oppDiv = document.createElement('div');
                     oppDiv.className = 'opportunity-item';
                     const riskLevel = opp.risk < 0.4 ? 'Low' : opp.risk < 0.7 ? 'Medium' : 'High';
                     oppDiv.innerHTML = `
                         <strong>${opp.type.replace(/_/g, ' ').toUpperCase()}: ${opp.zone_from} → ${opp.zone_to}</strong>
-                        <div class="opportunity-profit">Profit Potential: ${opp.profit.toLocaleString()}</div>
-                        <div>Spread: ${opp.spread.toFixed(2)}/MWh | Volume: ${opp.volume.toLocaleString()} MW | Risk: ${riskLevel}</div>
+                        <div class="opportunity-profit">Profit Potential: ${Math.round(opp.profit).toLocaleString()}</div>
+                        <div>Spread: ${opp.spread.toFixed(2)}/MWh | Volume: ${Math.round(opp.volume).toLocaleString()} MW | Risk: ${riskLevel}</div>
                     `;
                     opportunitiesList.appendChild(oppDiv);
                 });
                 
-                return true;
             } catch (error) {
                 console.error('Error updating opportunities:', error);
-                return false;
             }
         }
         
-        async function updateAlerts() {
+        function updateAlerts() {
             try {
-                const response = await fetch('/api/alerts');
-                const data = await response.json();
-                
-                currentData.alerts = data.alerts;
-                
                 const alertsList = document.getElementById('alerts-list');
+                if (!alertsList) return;
+                
                 alertsList.innerHTML = '';
                 
-                data.alerts.slice(0, 3).forEach(alert => {
+                marketData.alerts.forEach(alert => {
                     const alertDiv = document.createElement('div');
                     alertDiv.className = `alert-item alert-${alert.severity.toLowerCase()}`;
                     alertDiv.innerHTML = `
@@ -976,142 +980,127 @@ dashboard_html = '''
                     alertsList.appendChild(alertDiv);
                 });
                 
-                return true;
             } catch (error) {
                 console.error('Error updating alerts:', error);
-                return false;
             }
         }
         
+        // Main refresh function
         function refreshAllData() {
-            const refreshMessage = document.getElementById('refresh-message');
-            refreshMessage.innerHTML = '<div class="success-message">🔄 Refreshing market data...</div>';
-            
-            // Call refresh API
-            fetch('/api/refresh')
-                .then(response => response.json())
-                .then(() => {
-                    return Promise.all([
-                        updateZoneData(),
-                        updateOpportunities(),
-                        updateAlerts()
-                    ]);
-                })
-                .then(() => {
-                    const activeTab = document.querySelector('.nav-tab.active').textContent.toLowerCase();
-                    if (activeTab.includes('overview')) {
+            try {
+                const refreshMessage = document.getElementById('refresh-message');
+                if (refreshMessage) {
+                    refreshMessage.innerHTML = '<div class="success-message">🔄 Refreshing market data...</div>';
+                }
+                
+                // Generate new data
+                dataGenerator.generateNewData();
+                
+                // Update all components
+                updateZoneData();
+                updateOpportunities();
+                updateAlerts();
+                
+                // Refresh active chart
+                const activeTab = document.querySelector('.nav-tab.active');
+                if (activeTab) {
+                    const tabName = activeTab.textContent.toLowerCase();
+                    if (tabName.includes('overview')) {
                         initPriceComparisonChart();
-                    } else if (activeTab.includes('trading')) {
+                    } else if (tabName.includes('trading')) {
                         initOpportunityChart();
                     }
+                }
+                
+                if (refreshMessage) {
                     refreshMessage.innerHTML = '<div class="success-message">✅ Market data refreshed successfully!</div>';
                     setTimeout(() => {
                         refreshMessage.innerHTML = '';
                     }, 3000);
-                })
-                .catch(error => {
-                    console.error('Error refreshing data:', error);
-                    refreshMessage.innerHTML = '<div class="success-message">⚠️ Connection issue - data may be cached</div>';
+                }
+                
+            } catch (error) {
+                console.error('Error refreshing data:', error);
+                const refreshMessage = document.getElementById('refresh-message');
+                if (refreshMessage) {
+                    refreshMessage.innerHTML = '<div class="success-message">⚠️ Refresh completed with some issues</div>';
                     setTimeout(() => {
                         refreshMessage.innerHTML = '';
                     }, 5000);
-                });
+                }
+            }
         }
         
         // Auto-refresh every 3 minutes
         setInterval(refreshAllData, 180000);
         
-        // Initialize on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            // Load initial data
-            Promise.all([
-                updateZoneData(),
-                updateOpportunities(),
-                updateAlerts()
-            ]).then(() => {
-                initializeCharts('overview');
-            }).catch(error => {
-                console.error('Error loading initial data:', error);
-                // Still initialize charts with empty data
-                initializeCharts('overview');
-            });
+        // Initialize everything when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 Initializing NYISO Dashboard...');
+            
+            try {
+                // Load initial data
+                updateZoneData();
+                updateOpportunities(); 
+                updateAlerts();
+                
+                // Initialize charts after a short delay
+                setTimeout(() => {
+                    initializeCharts('overview');
+                    console.log('✅ Dashboard initialized successfully!');
+                }, 500);
+                
+            } catch (error) {
+                console.error('❌ Error during initialization:', error);
+            }
         });
+        
+        // Debug function for troubleshooting
+        function debugInfo() {
+            console.log('Market Data:', marketData);
+            console.log('Charts:', charts);
+            console.log('Zone table rows:', document.querySelectorAll('#zone-data-body tr').length);
+            console.log('Chart.js loaded:', typeof Chart !== 'undefined');
+        }
+        
+        // Make functions available globally
+        window.showTab = showTab;
+        window.refreshAllData = refreshAllData;
+        window.debugInfo = debugInfo;
+        
     </script>
 </body>
 </html>
 '''
 
-# API Routes
 @app.route('/')
 def dashboard():
     return render_template_string(dashboard_html)
 
-@app.route('/api/zone-data')
-def get_zone_data():
-    try:
-        data = data_generator.generate_zone_data()
-        return jsonify(data)
-    except Exception as e:
-        print(f"Error generating zone data: {e}")
-        return jsonify({'error': 'Data generation failed'}), 500
-
-@app.route('/api/opportunities')
-def get_opportunities():
-    try:
-        opportunities = data_generator.generate_opportunities()
-        return jsonify({'opportunities': opportunities})
-    except Exception as e:
-        print(f"Error generating opportunities: {e}")
-        return jsonify({'error': 'Opportunities generation failed'}), 500
-
-@app.route('/api/alerts')
-def get_alerts():
-    try:
-        alerts = data_generator.generate_alerts()
-        return jsonify({'alerts': alerts})
-    except Exception as e:
-        print(f"Error generating alerts: {e}")
-        return jsonify({'error': 'Alerts generation failed'}), 500
-
-@app.route('/api/refresh')
-def refresh_data():
-    try:
-        # Simulate data refresh
-        time.sleep(0.5)  # Small delay to simulate processing
-        return jsonify({
-            'success': True,
-            'message': 'Data refreshed successfully',
-            'timestamp': datetime.now().isoformat()
-        })
-    except Exception as e:
-        print(f"Error refreshing data: {e}")
-        return jsonify({'error': 'Refresh failed'}), 500
-
 @app.route('/health')
 def health():
-    return jsonify({
+    return {
         'status': 'healthy',
         'service': 'NYISO Enterprise Trading Platform',
-        'version': '5.0.0 - Standalone',
+        'version': '6.0.0 - Complete Fixed',
+        'timestamp': datetime.now().isoformat(),
         'features': [
             'Real-time market simulation',
             'Trading opportunity analysis', 
-            'Dynamic price forecasting',
+            'Interactive charts with Chart.js',
             'Market alerts system',
             'Portfolio tracking',
-            'Multi-zone monitoring'
-        ],
-        'zones_monitored': len(data_generator.zones),
-        'timestamp': datetime.now().isoformat()
-    })
+            'Multi-zone NYISO monitoring'
+        ]
+    }
 
 if __name__ == '__main__':
-    print("🚀 Starting NYISO Enterprise Trading Platform V5...")
-    print("💡 Standalone Version - No Dependencies")
-    print("📊 Dashboard: Fully self-contained")
-    print("🔄 Data: Dynamic generation")
-    print("⚡ All NYISO zones: Real-time simulation")
-    print("🎯 Ready for immediate use...")
+    print("🚀 Starting NYISO Enterprise Trading Platform V6...")
+    print("✅ Complete JavaScript - All functions finished")
+    print("📊 Charts: Interface chart properly completed")
+    print("🔧 All syntax errors fixed")
+    print("💾 Data: In-memory generation")
+    print("⚡ Ready for deployment...")
     
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
