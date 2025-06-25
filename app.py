@@ -1,5 +1,4 @@
 from flask import Flask, render_template_string, jsonify, request
-import sqlite3
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -7,478 +6,208 @@ import requests
 import threading
 import time
 import os
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import StandardScaler
 import warnings
 warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
 
-class EnterpriseNYISOCollector:
+class SimplifiedNYISOCollector:
     def __init__(self):
-        self.base_urls = {
-            'realtime_lbmp': 'http://mis.nyiso.com/public/csv/realtime/{date}realtime_zone.csv',
-            'dayahead_lbmp': 'http://mis.nyiso.com/public/csv/damlbmp/{date}damlbmp_zone.csv',
-            'fuel_mix': 'http://mis.nyiso.com/public/csv/rtfuelmix/{date}rtfuelmix.csv',
-            'load_forecast': 'http://mis.nyiso.com/public/csv/isolf/{date}isolf.csv',
-            'real_load': 'http://mis.nyiso.com/public/csv/pal/{date}pal.csv',
-            'interface_flows': 'http://mis.nyiso.com/public/csv/ExternalLimitsFlows/{date}ExternalLimitsFlows.csv',
-            'capacity_factors': 'http://mis.nyiso.com/public/csv/WindSolar/{date}WindSolar.csv'
-        }
-        
         self.zones = ['CAPITL', 'CENTRL', 'DUNWOD', 'GENESE', 'HUD VL', 'LONGIL', 'MHK VL', 'MILLWD', 'N.Y.C.', 'NORTH', 'WEST']
-        
-        self.db_connection = sqlite3.connect('enterprise_nyiso.db', check_same_thread=False)
-        self.setup_enterprise_database()
-        self.ml_models = self.initialize_ml_models()
+        self.current_data = {}
         self.is_collecting = False
+        self.last_update = datetime.now()
         
-    def setup_enterprise_database(self):
-        cursor = self.db_connection.cursor()
-        
-        # Enhanced real-time pricing
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS realtime_pricing (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                zone TEXT,
-                lbmp REAL,
-                energy_component REAL,
-                congestion_component REAL,
-                losses_component REAL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Day-ahead market data
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS dayahead_pricing (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                zone TEXT,
-                da_lbmp REAL,
-                da_energy REAL,
-                da_congestion REAL,
-                da_losses REAL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Load data
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS load_data (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                zone TEXT,
-                actual_load REAL,
-                forecast_load REAL,
-                peak_forecast REAL,
-                load_factor REAL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Generation data
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS generation_data (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                fuel_type TEXT,
-                generation_mw REAL,
-                capacity_mw REAL,
-                capacity_factor REAL,
-                marginal_cost REAL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Interface data
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS interface_data (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                interface_name TEXT,
-                flow_mw REAL,
-                limit_mw REAL,
-                utilization_pct REAL,
-                congestion_cost REAL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Trading opportunities
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS trading_opportunities (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                opportunity_type TEXT,
-                zone_from TEXT,
-                zone_to TEXT,
-                price_spread REAL,
-                volume_mw REAL,
-                profit_potential REAL,
-                risk_score REAL,
-                confidence REAL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Predictions
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS predictions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                zone TEXT,
-                horizon TEXT,
-                predicted_load REAL,
-                predicted_price REAL,
-                price_volatility REAL,
-                congestion_probability REAL,
-                model_type TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Market alerts
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS market_alerts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                alert_type TEXT,
-                severity TEXT,
-                zone TEXT,
-                message TEXT,
-                trigger_value REAL,
-                profit_impact REAL,
-                action_required TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        self.db_connection.commit()
-    
-    def initialize_ml_models(self):
-        return {
-            'load_predictor': RandomForestRegressor(n_estimators=100, random_state=42),
-            'price_predictor': GradientBoostingRegressor(n_estimators=100, random_state=42),
-            'scaler': StandardScaler()
-        }
-    
-    def fetch_comprehensive_data(self):
-        """Fetch all NYISO data sources"""
+    def generate_realistic_data(self):
+        """Generate realistic NYISO market data without database"""
         try:
-            self.generate_comprehensive_sample_data()
-            self.analyze_trading_opportunities()
-            self.generate_advanced_predictions()
-            self.check_market_alerts()
-            return True
-        except Exception as e:
-            print(f"Error in comprehensive data collection: {e}")
-            return False
-    
-    def generate_comprehensive_sample_data(self):
-        """Generate realistic sample data for all market aspects"""
-        cursor = self.db_connection.cursor()
-        current_time = datetime.now().isoformat()
-        
-        # Clear old data
-        cursor.execute('DELETE FROM realtime_pricing WHERE created_at < datetime("now", "-1 hour")')
-        cursor.execute('DELETE FROM dayahead_pricing WHERE created_at < datetime("now", "-1 hour")')
-        cursor.execute('DELETE FROM load_data WHERE created_at < datetime("now", "-1 hour")')
-        cursor.execute('DELETE FROM generation_data WHERE created_at < datetime("now", "-1 hour")')
-        cursor.execute('DELETE FROM interface_data WHERE created_at < datetime("now", "-1 hour")')
-        
-        # Generate pricing data for all zones
-        for zone in self.zones:
-            if zone == 'N.Y.C.':
-                base_price = 45 + np.random.normal(0, 12)
-                congestion = max(0, np.random.normal(8, 15))
-                actual_load = np.random.normal(8500, 1200)
-            elif zone in ['LONGIL', 'DUNWOD']:
-                base_price = 42 + np.random.normal(0, 10)
-                congestion = max(0, np.random.normal(5, 12))
-                actual_load = np.random.normal(3200, 600)
-            else:
-                base_price = 38 + np.random.normal(0, 8)
-                congestion = max(0, np.random.normal(2, 8))
-                actual_load = np.random.normal(1800, 400)
+            current_time = datetime.now()
             
-            energy_component = base_price * 0.85
-            losses_component = base_price * 0.05
-            lbmp = energy_component + congestion + losses_component
-            
-            # Real-time pricing
-            cursor.execute('''
-                INSERT INTO realtime_pricing 
-                (timestamp, zone, lbmp, energy_component, congestion_component, losses_component)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (current_time, zone, lbmp, energy_component, congestion, losses_component))
-            
-            # Day-ahead pricing
-            da_premium = np.random.normal(0, 0.08)
-            da_lbmp = lbmp * (1 + da_premium)
-            
-            cursor.execute('''
-                INSERT INTO dayahead_pricing 
-                (timestamp, zone, da_lbmp, da_energy, da_congestion, da_losses)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (current_time, zone, da_lbmp, energy_component * (1 + da_premium),
-                  congestion * (1 + da_premium), losses_component * (1 + da_premium)))
-            
-            # Load data
-            forecast_load = actual_load * np.random.uniform(0.95, 1.05)
-            
-            cursor.execute('''
-                INSERT INTO load_data 
-                (timestamp, zone, actual_load, forecast_load, peak_forecast, load_factor)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (current_time, zone, actual_load, forecast_load,
-                  actual_load * np.random.uniform(1.1, 1.3),
-                  np.random.uniform(0.65, 0.95)))
-        
-        # Generation data
-        fuel_types = [
-            ('Natural Gas', 12000, 25000, 0.48, 35),
-            ('Nuclear', 5200, 5400, 0.96, 12),
-            ('Hydro', 2800, 4500, 0.62, 0),
-            ('Wind', 1800, 4200, 0.43, 0),
-            ('Solar', 800, 2100, 0.38, 0),
-            ('Coal', 400, 1200, 0.33, 45),
-            ('Oil', 200, 800, 0.25, 85)
-        ]
-        
-        for fuel, gen_mw, cap_mw, base_cf, mc in fuel_types:
-            capacity_factor = base_cf + np.random.normal(0, 0.1)
-            capacity_factor = max(0, min(1, capacity_factor))
-            generation = cap_mw * capacity_factor
-            
-            cursor.execute('''
-                INSERT INTO generation_data 
-                (timestamp, fuel_type, generation_mw, capacity_mw, capacity_factor, marginal_cost)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (current_time, fuel, generation, cap_mw, capacity_factor,
-                  mc + np.random.normal(0, 5)))
-        
-        # Interface flows
-        interfaces = [
-            ('PJM', 1000, 0.75),
-            ('NE', 800, 0.65),
-            ('HQ', 1200, 0.82),
-            ('OH', 600, 0.45),
-            ('Central East', 2000, 0.55),
-            ('UPNY SENY', 2500, 0.68)
-        ]
-        
-        for interface, limit, base_util in interfaces:
-            utilization = base_util + np.random.normal(0, 0.15)
-            utilization = max(0, min(1, utilization))
-            flow = limit * utilization
-            congestion_cost = max(0, (utilization - 0.9) * 100 + np.random.normal(0, 10))
-            
-            cursor.execute('''
-                INSERT INTO interface_data 
-                (timestamp, interface_name, flow_mw, limit_mw, utilization_pct, congestion_cost)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (current_time, interface, flow, limit, utilization * 100, congestion_cost))
-        
-        self.db_connection.commit()
-    
-    def analyze_trading_opportunities(self):
-        """Identify arbitrage and trading opportunities"""
-        cursor = self.db_connection.cursor()
-        current_time = datetime.now().isoformat()
-        
-        # Clear old opportunities
-        cursor.execute('DELETE FROM trading_opportunities WHERE created_at < datetime("now", "-1 hour")')
-        
-        # Get latest pricing data
-        cursor.execute('''
-            SELECT rt.zone, rt.lbmp, da.da_lbmp
-            FROM realtime_pricing rt
-            LEFT JOIN dayahead_pricing da ON rt.zone = da.zone
-            WHERE rt.created_at = (SELECT MAX(created_at) FROM realtime_pricing)
-        ''')
-        
-        price_data = cursor.fetchall()
-        
-        for i, (zone1, rt1, da1) in enumerate(price_data):
-            for j, (zone2, rt2, da2) in enumerate(price_data[i+1:], i+1):
-                if rt1 and rt2:
-                    # Spatial arbitrage
-                    rt_spread = rt1 - rt2
-                    if abs(rt_spread) > 5:
-                        volume = np.random.uniform(100, 1000)
-                        profit = abs(rt_spread) * volume * 0.75
-                        risk = min(abs(rt_spread) / 30, 1.0)
-                        
-                        cursor.execute('''
-                            INSERT INTO trading_opportunities 
-                            (timestamp, opportunity_type, zone_from, zone_to, price_spread,
-                             volume_mw, profit_potential, risk_score, confidence)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (current_time, 'spatial_arbitrage',
-                              zone1 if rt_spread > 0 else zone2,
-                              zone2 if rt_spread > 0 else zone1,
-                              abs(rt_spread), volume, profit, risk, 0.8))
-                
-                # Temporal arbitrage
-                if da1 and rt1:
-                    da_rt_spread = da1 - rt1
-                    if abs(da_rt_spread) > 8:
-                        volume = np.random.uniform(200, 1500)
-                        profit = abs(da_rt_spread) * volume * 0.6
-                        risk = min(abs(da_rt_spread) / 40, 1.0)
-                        
-                        cursor.execute('''
-                            INSERT INTO trading_opportunities 
-                            (timestamp, opportunity_type, zone_from, zone_to, price_spread,
-                             volume_mw, profit_potential, risk_score, confidence)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (current_time, 'temporal_arbitrage', zone1, zone1,
-                              abs(da_rt_spread), volume, profit, risk, 0.7))
-        
-        self.db_connection.commit()
-    
-    def generate_advanced_predictions(self):
-        """Generate sophisticated market predictions"""
-        cursor = self.db_connection.cursor()
-        current_time = datetime.now().isoformat()
-        
-        # Clear old predictions
-        cursor.execute('DELETE FROM predictions WHERE created_at < datetime("now", "-1 hour")')
-        
-        for zone in self.zones:
-            horizons = ['1H', '4H', '24H', '7D']
-            
-            for horizon in horizons:
-                base_price = 50 if zone == 'N.Y.C.' else 40
-                base_load = 8000 if zone == 'N.Y.C.' else 2000
-                
-                if horizon == '1H':
-                    price_volatility = 0.08
-                    price_trend = np.random.normal(0, 0.02)
-                    load_trend = np.random.normal(0, 0.02)
-                elif horizon == '4H':
-                    price_volatility = 0.15
-                    price_trend = np.random.normal(0, 0.05)
-                    load_trend = np.random.normal(0, 0.03)
-                elif horizon == '24H':
-                    price_volatility = 0.25
-                    price_trend = np.random.normal(0, 0.08)
-                    load_trend = np.random.normal(0, 0.05)
+            # Zone pricing data
+            zone_data = []
+            for zone in self.zones:
+                if zone == 'N.Y.C.':
+                    base_price = 45 + np.random.normal(0, 12)
+                    congestion = max(0, np.random.normal(8, 15))
+                    actual_load = np.random.normal(8500, 1200)
+                elif zone in ['LONGIL', 'DUNWOD']:
+                    base_price = 42 + np.random.normal(0, 10)
+                    congestion = max(0, np.random.normal(5, 12))
+                    actual_load = np.random.normal(3200, 600)
                 else:
-                    price_volatility = 0.35
-                    price_trend = np.random.normal(0, 0.12)
-                    load_trend = np.random.normal(0, 0.08)
+                    base_price = 38 + np.random.normal(0, 8)
+                    congestion = max(0, np.random.normal(2, 8))
+                    actual_load = np.random.normal(1800, 400)
                 
-                predicted_price = base_price * (1 + price_trend)
-                predicted_load = base_load * (1 + load_trend)
-                congestion_prob = np.random.uniform(0.1, 0.4) if zone in ['N.Y.C.', 'LONGIL'] else np.random.uniform(0.05, 0.2)
+                energy_component = base_price * 0.85
+                losses_component = base_price * 0.05
+                rt_price = energy_component + congestion + losses_component
                 
-                cursor.execute('''
-                    INSERT INTO predictions 
-                    (timestamp, zone, horizon, predicted_load, predicted_price,
-                     price_volatility, congestion_probability, model_type)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (current_time, zone, horizon, predicted_load, predicted_price,
-                      price_volatility, congestion_prob, 'ensemble_ml'))
-        
-        self.db_connection.commit()
-    
-    def check_market_alerts(self):
-        """Generate comprehensive market alerts"""
-        cursor = self.db_connection.cursor()
-        current_time = datetime.now().isoformat()
-        
-        # Clear old alerts
-        cursor.execute('DELETE FROM market_alerts WHERE created_at < datetime("now", "-4 hours")')
-        
-        # High price alerts
-        cursor.execute('''
-            SELECT zone, lbmp, congestion_component
-            FROM realtime_pricing 
-            WHERE created_at = (SELECT MAX(created_at) FROM realtime_pricing)
-            AND lbmp > 100
-        ''')
-        
-        high_price_zones = cursor.fetchall()
-        for zone, lbmp, congestion in high_price_zones:
-            severity = 'CRITICAL' if lbmp > 200 else 'HIGH' if lbmp > 150 else 'MEDIUM'
-            profit_impact = lbmp * np.random.uniform(100, 500)
+                # Day-ahead price (5-10% different)
+                da_premium = np.random.normal(0, 0.08)
+                da_price = rt_price * (1 + da_premium)
+                
+                # Trading opportunity assessment
+                spread = abs(rt_price - da_price)
+                if spread > 10:
+                    opportunity = "High"
+                elif spread > 5:
+                    opportunity = "Medium"
+                else:
+                    opportunity = "Low"
+                
+                zone_data.append({
+                    'zone': zone,
+                    'rt_price': rt_price,
+                    'da_price': da_price,
+                    'congestion': congestion,
+                    'load': actual_load,
+                    'opportunity': opportunity
+                })
             
-            cursor.execute('''
-                INSERT INTO market_alerts 
-                (timestamp, alert_type, severity, zone, message, trigger_value,
-                 profit_impact, action_required)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (current_time, 'price_spike', severity, zone,
-                  f'Price spike in {zone}: ${lbmp:.2f}/MWh',
-                  lbmp, profit_impact,
-                  'Consider demand response or supply actions'))
-        
-        # Congestion alerts
-        cursor.execute('''
-            SELECT interface_name, utilization_pct, congestion_cost
-            FROM interface_data 
-            WHERE created_at = (SELECT MAX(created_at) FROM interface_data)
-            AND utilization_pct > 85
-        ''')
-        
-        congested_interfaces = cursor.fetchall()
-        for interface, util, cost in congested_interfaces:
-            severity = 'CRITICAL' if util > 95 else 'HIGH'
-            cursor.execute('''
-                INSERT INTO market_alerts 
-                (timestamp, alert_type, severity, zone, message, trigger_value,
-                 profit_impact, action_required)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (current_time, 'congestion', severity, interface,
-                  f'Interface congestion: {interface} at {util:.1f}%',
-                  util, cost * 100,
-                  'Monitor for trading opportunities'))
-        
-        # Trading opportunity alerts
-        cursor.execute('''
-            SELECT opportunity_type, zone_from, zone_to, profit_potential
-            FROM trading_opportunities 
-            WHERE created_at = (SELECT MAX(created_at) FROM trading_opportunities)
-            AND profit_potential > 5000
-            ORDER BY profit_potential DESC
-            LIMIT 3
-        ''')
-        
-        opportunities = cursor.fetchall()
-        for opp_type, zone_from, zone_to, profit in opportunities:
-            cursor.execute('''
-                INSERT INTO market_alerts 
-                (timestamp, alert_type, severity, zone, message, trigger_value,
-                 profit_impact, action_required)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (current_time, 'trading_opportunity', 'MEDIUM', zone_from,
-                  f'High profit {opp_type}: {zone_from}→{zone_to} (${profit:.0f})',
-                  profit, profit,
-                  'Execute trade or hedge position'))
-        
-        self.db_connection.commit()
+            # Predictions data
+            predictions = []
+            for zone in self.zones:
+                base_price = 40 if zone != 'N.Y.C.' else 50
+                base_load = 2000 if zone != 'N.Y.C.' else 8000
+                
+                predictions.append({
+                    'zone': zone,
+                    'price_1h': base_price + np.random.normal(0, 5),
+                    'price_4h': base_price + np.random.normal(0, 8),
+                    'price_24h': base_price + np.random.normal(0, 12),
+                    'load_1h': base_load + np.random.normal(0, 200),
+                    'congestion_risk': np.random.uniform(0.1, 0.3),
+                    'confidence': np.random.uniform(0.7, 0.9)
+                })
+            
+            # Trading opportunities
+            opportunities = []
+            for i in range(5):
+                zone_from = np.random.choice(self.zones)
+                zone_to = np.random.choice([z for z in self.zones if z != zone_from])
+                spread = np.random.uniform(5, 25)
+                volume = np.random.uniform(100, 1000)
+                profit = spread * volume * 0.7
+                
+                opportunities.append({
+                    'type': np.random.choice(['spatial_arbitrage', 'temporal_arbitrage']),
+                    'zone_from': zone_from,
+                    'zone_to': zone_to,
+                    'spread': spread,
+                    'volume': volume,
+                    'profit': profit,
+                    'risk': np.random.uniform(0.2, 0.8),
+                    'confidence': np.random.uniform(0.6, 0.9)
+                })
+            
+            # Market alerts
+            alerts = []
+            high_price_zones = [z for z in zone_data if z['rt_price'] > 100]
+            for zone_info in high_price_zones[:3]:
+                severity = 'CRITICAL' if zone_info['rt_price'] > 200 else 'HIGH' if zone_info['rt_price'] > 150 else 'MEDIUM'
+                alerts.append({
+                    'type': 'price_spike',
+                    'severity': severity,
+                    'zone': zone_info['zone'],
+                    'message': f"Price spike in {zone_info['zone']}: ${zone_info['rt_price']:.2f}/MWh",
+                    'value': zone_info['rt_price'],
+                    'impact': zone_info['rt_price'] * 100,
+                    'action': 'Consider demand response or supply actions'
+                })
+            
+            # Add congestion alerts
+            alerts.append({
+                'type': 'congestion',
+                'severity': 'HIGH',
+                'zone': 'PJM Interface',
+                'message': 'Interface congestion: PJM at 95.2%',
+                'value': 95.2,
+                'impact': 5000,
+                'action': 'Monitor for arbitrage opportunities'
+            })
+            
+            # Add trading opportunity alert
+            best_opp = max(opportunities, key=lambda x: x['profit'])
+            alerts.append({
+                'type': 'trading_opportunity',
+                'severity': 'MEDIUM',
+                'zone': best_opp['zone_from'],
+                'message': f"High profit {best_opp['type']}: {best_opp['zone_from']}→{best_opp['zone_to']} (${best_opp['profit']:.0f})",
+                'value': best_opp['profit'],
+                'impact': best_opp['profit'],
+                'action': 'Execute trade or hedge position'
+            })
+            
+            # Generation mix
+            generation = [
+                {'fuel': 'Natural Gas', 'generation': 12000 + np.random.normal(0, 1000), 'capacity_factor': 0.48 + np.random.normal(0, 0.1), 'marginal_cost': 35 + np.random.normal(0, 5)},
+                {'fuel': 'Nuclear', 'generation': 5200 + np.random.normal(0, 200), 'capacity_factor': 0.96 + np.random.normal(0, 0.02), 'marginal_cost': 12 + np.random.normal(0, 2)},
+                {'fuel': 'Hydro', 'generation': 2800 + np.random.normal(0, 400), 'capacity_factor': 0.62 + np.random.normal(0, 0.1), 'marginal_cost': 0},
+                {'fuel': 'Wind', 'generation': 1800 + np.random.normal(0, 600), 'capacity_factor': 0.43 + np.random.normal(0, 0.15), 'marginal_cost': 0},
+                {'fuel': 'Solar', 'generation': 800 + np.random.normal(0, 300), 'capacity_factor': 0.38 + np.random.normal(0, 0.2), 'marginal_cost': 0},
+                {'fuel': 'Coal', 'generation': 400 + np.random.normal(0, 100), 'capacity_factor': 0.33 + np.random.normal(0, 0.1), 'marginal_cost': 45 + np.random.normal(0, 8)},
+                {'fuel': 'Oil', 'generation': 200 + np.random.normal(0, 50), 'capacity_factor': 0.25 + np.random.normal(0, 0.1), 'marginal_cost': 85 + np.random.normal(0, 10)}
+            ]
+            
+            # Interface flows
+            interfaces = [
+                {'name': 'PJM', 'flow': 750 + np.random.normal(0, 100), 'limit': 1000, 'utilization': 75 + np.random.normal(0, 10), 'congestion_cost': np.random.uniform(0, 50), 'shadow_price': np.random.uniform(0, 60)},
+                {'name': 'NE', 'flow': 520 + np.random.normal(0, 80), 'limit': 800, 'utilization': 65 + np.random.normal(0, 10), 'congestion_cost': np.random.uniform(0, 30), 'shadow_price': np.random.uniform(0, 40)},
+                {'name': 'HQ', 'flow': 980 + np.random.normal(0, 120), 'limit': 1200, 'utilization': 82 + np.random.normal(0, 8), 'congestion_cost': np.random.uniform(0, 40), 'shadow_price': np.random.uniform(0, 50)},
+                {'name': 'OH', 'flow': 270 + np.random.normal(0, 50), 'limit': 600, 'utilization': 45 + np.random.normal(0, 15), 'congestion_cost': np.random.uniform(0, 20), 'shadow_price': np.random.uniform(0, 25)},
+                {'name': 'Central East', 'flow': 1100 + np.random.normal(0, 150), 'limit': 2000, 'utilization': 55 + np.random.normal(0, 12), 'congestion_cost': np.random.uniform(0, 35), 'shadow_price': np.random.uniform(0, 45)},
+                {'name': 'UPNY SENY', 'flow': 1700 + np.random.normal(0, 200), 'limit': 2500, 'utilization': 68 + np.random.normal(0, 10), 'congestion_cost': np.random.uniform(0, 45), 'shadow_price': np.random.uniform(0, 55)}
+            ]
+            
+            # Portfolio summary
+            portfolio = {
+                'total_pnl': np.random.normal(45000, 15000),
+                'daily_change': np.random.normal(0.12, 0.05),
+                'active_positions': np.random.randint(15, 30),
+                'profitable_positions': np.random.randint(8, 20),
+                'at_risk_positions': np.random.randint(0, 5),
+                'avg_price': np.random.normal(42, 8),
+                'system_load': sum(z['load'] for z in zone_data),
+                'load_change': np.random.normal(0.03, 0.02)
+            }
+            
+            # Store all data
+            self.current_data = {
+                'zones': zone_data,
+                'predictions': predictions,
+                'opportunities': opportunities,
+                'alerts': alerts,
+                'generation': generation,
+                'interfaces': interfaces,
+                'portfolio': portfolio,
+                'last_update': current_time.isoformat()
+            }
+            
+            self.last_update = current_time
+            return True
+            
+        except Exception as e:
+            print(f"Error generating data: {e}")
+            return False
 
 # Initialize collector
-collector = EnterpriseNYISOCollector()
+collector = SimplifiedNYISOCollector()
 
-def enterprise_background_collection():
-    """Enterprise-grade background data collection"""
+def background_data_collection():
+    """Background data collection without database"""
     while True:
         try:
-            collector.fetch_comprehensive_data()
-            time.sleep(180)  # 3 minutes
+            collector.generate_realistic_data()
+            time.sleep(180)  # Update every 3 minutes
         except Exception as e:
-            print(f"Enterprise collection error: {e}")
+            print(f"Background collection error: {e}")
             time.sleep(60)
 
 # Start background thread
 if not collector.is_collecting:
     collector.is_collecting = True
-    thread = threading.Thread(target=enterprise_background_collection, daemon=True)
+    thread = threading.Thread(target=background_data_collection, daemon=True)
     thread.start()
 
 # HTML Template
@@ -746,6 +475,16 @@ dashboard_html = '''
             box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4);
         }
         
+        .success-message {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid #10b981;
+            color: #10b981;
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            text-align: center;
+        }
+        
         @media (max-width: 1200px) {
             .dashboard-grid { grid-template-columns: 1fr 1fr; }
             .main-content { grid-template-columns: 1fr; }
@@ -759,7 +498,6 @@ dashboard_html = '''
     </style>
 </head>
 <body>
-    <div class="header">
     <div class="header">
         <div class="header-content">
             <div class="logo">⚡ NYISO Enterprise Trading Platform</div>
@@ -778,6 +516,8 @@ dashboard_html = '''
     </div>
 
     <div class="container">
+        <div id="refresh-message"></div>
+        
         <!-- Market Overview Tab -->
         <div id="overview-tab" class="tab-content">
             <div class="dashboard-grid">
@@ -826,39 +566,14 @@ dashboard_html = '''
                     <div class="opportunities-panel">
                         <h3>🎯 Top Trading Opportunities</h3>
                         <div id="opportunities-list">
-                            <div class="opportunity-item">
-                                <strong>Spatial Arbitrage: NYC → LONGIL</strong>
-                                <div class="opportunity-profit">Profit Potential: $8,420</div>
-                                <div>Spread: $15.60/MWh | Volume: 540 MW | Risk: Low</div>
-                            </div>
-                            <div class="opportunity-item">
-                                <strong>Virtual Trading: CAPITL DA/RT</strong>
-                                <div class="opportunity-profit">Profit Potential: $5,230</div>
-                                <div>Spread: $12.30/MWh | Volume: 425 MW | Risk: Medium</div>
-                            </div>
-                            <div class="opportunity-item">
-                                <strong>Congestion Play: HQ Interface</strong>
-                                <div class="opportunity-profit">Profit Potential: $3,180</div>
-                                <div>Shadow Price: $45/MWh | Available: 200 MW | Risk: High</div>
-                            </div>
+                            <!-- Dynamic content -->
                         </div>
                     </div>
                     
                     <div class="alerts-panel">
                         <h3>🚨 Market Alerts</h3>
                         <div id="alerts-list">
-                            <div class="alert-item alert-critical">
-                                <strong>CRITICAL:</strong> Price spike in NYC - $287.50/MWh
-                                <div>Action: Consider demand response activation</div>
-                            </div>
-                            <div class="alert-item alert-high">
-                                <strong>HIGH:</strong> Interface congestion - PJM at 95%
-                                <div>Action: Monitor for arbitrage opportunities</div>
-                            </div>
-                            <div class="alert-item alert-medium">
-                                <strong>MEDIUM:</strong> Wind forecast updated - 15% increase
-                                <div>Action: Adjust renewable energy positions</div>
-                            </div>
+                            <!-- Dynamic content -->
                         </div>
                     </div>
                 </div>
@@ -982,51 +697,109 @@ dashboard_html = '''
                 charts.priceComparison.destroy();
             }
             
-            charts.priceComparison = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: ['CAPITL', 'CENTRL', 'DUNWOD', 'GENESE', 'HUD VL', 'LONGIL', 'MHK VL', 'MILLWD', 'N.Y.C.', 'NORTH', 'WEST'],
-                    datasets: [{
-                        label: 'Real-Time Price',
-                        data: [38.5, 41.2, 52.3, 35.8, 48.7, 58.2, 33.9, 47.1, 62.4, 31.5, 39.8],
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        tension: 0.4,
-                        fill: true
-                    }, {
-                        label: 'Day-Ahead Price',
-                        data: [42.1, 39.8, 48.9, 38.2, 52.1, 54.7, 36.4, 43.8, 58.9, 34.2, 42.3],
-                        borderColor: '#10b981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        tension: 0.4,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            labels: { color: '#fff' }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            ticks: { color: '#94a3b8' },
-                            grid: { color: '#475569' }
+            // Use real data from API
+            fetch('/api/zone-data')
+                .then(response => response.json())
+                .then(data => {
+                    const zones = data.zones.map(z => z.zone);
+                    const rtPrices = data.zones.map(z => z.rt_price);
+                    const daPrices = data.zones.map(z => z.da_price);
+                    
+                    charts.priceComparison = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: zones,
+                            datasets: [{
+                                label: 'Real-Time Price',
+                                data: rtPrices,
+                                borderColor: '#3b82f6',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                tension: 0.4,
+                                fill: true
+                            }, {
+                                label: 'Day-Ahead Price',
+                                data: daPrices,
+                                borderColor: '#10b981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                tension: 0.4,
+                                fill: false
+                            }]
                         },
-                        y: {
-                            ticks: { color: '#94a3b8' },
-                            grid: { color: '#475569' },
-                            title: {
-                                display: true,
-                                text: 'Price ($/MWh)',
-                                color: '#94a3b8'
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    labels: { color: '#fff' }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    ticks: { color: '#94a3b8' },
+                                    grid: { color: '#475569' }
+                                },
+                                y: {
+                                    ticks: { color: '#94a3b8' },
+                                    grid: { color: '#475569' },
+                                    title: {
+                                        display: true,
+                                        text: 'Price ($/MWh)',
+                                        color: '#94a3b8'
+                                    }
+                                }
                             }
                         }
-                    }
-                }
-            });
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading price data:', error);
+                    // Fallback with sample data
+                    charts.priceComparison = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: ['CAPITL', 'CENTRL', 'DUNWOD', 'GENESE', 'HUD VL', 'LONGIL', 'MHK VL', 'MILLWD', 'N.Y.C.', 'NORTH', 'WEST'],
+                            datasets: [{
+                                label: 'Real-Time Price',
+                                data: [38.5, 41.2, 52.3, 35.8, 48.7, 58.2, 33.9, 47.1, 62.4, 31.5, 39.8],
+                                borderColor: '#3b82f6',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                tension: 0.4,
+                                fill: true
+                            }, {
+                                label: 'Day-Ahead Price',
+                                data: [42.1, 39.8, 48.9, 38.2, 52.1, 54.7, 36.4, 43.8, 58.9, 34.2, 42.3],
+                                borderColor: '#10b981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                tension: 0.4,
+                                fill: false
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    labels: { color: '#fff' }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    ticks: { color: '#94a3b8' },
+                                    grid: { color: '#475569' }
+                                },
+                                y: {
+                                    ticks: { color: '#94a3b8' },
+                                    grid: { color: '#475569' },
+                                    title: {
+                                        display: true,
+                                        text: 'Price ($/MWh)',
+                                        color: '#94a3b8'
+                                    }
+                                }
+                            }
+                        }
+                    });
+                });
         }
         
         function initOpportunityChart() {
@@ -1254,8 +1027,12 @@ dashboard_html = '''
         
         async function updateZoneData() {
             try {
-                const response = await fetch('/api/enterprise/zone-data');
+                const response = await fetch('/api/zone-data');
                 const data = await response.json();
+                
+                if (!data.zones) {
+                    throw new Error('No zone data received');
+                }
                 
                 const tbody = document.getElementById('zone-data-body');
                 tbody.innerHTML = '';
@@ -1277,46 +1054,136 @@ dashboard_html = '''
                     `;
                     tbody.appendChild(row);
                 });
+                
+                // Update dashboard metrics
+                updateDashboardMetrics(data);
+                
             } catch (error) {
                 console.error('Error updating zone data:', error);
+                // Use fallback data
+                updateZoneDataFallback();
             }
         }
         
-        async function updatePredictionsTable() {
+        function updateZoneDataFallback() {
+            const tbody = document.getElementById('zone-data-body');
+            tbody.innerHTML = '';
+            
+            const fallbackZones = [
+                {zone: 'CAPITL', rt_price: 38.5, da_price: 42.1, congestion: 2.3, load: 1850, opportunity: 'Medium'},
+                {zone: 'CENTRL', rt_price: 41.2, da_price: 39.8, congestion: 3.1, load: 1920, opportunity: 'Low'},
+                {zone: 'DUNWOD', rt_price: 52.3, da_price: 48.9, congestion: 8.2, load: 3150, opportunity: 'High'},
+                {zone: 'GENESE', rt_price: 35.8, da_price: 38.2, congestion: 1.8, load: 1750, opportunity: 'Low'},
+                {zone: 'HUD VL', rt_price: 48.7, da_price: 52.1, congestion: 6.5, load: 2880, opportunity: 'Medium'},
+                {zone: 'LONGIL', rt_price: 58.2, da_price: 54.7, congestion: 12.1, load: 3420, opportunity: 'High'},
+                {zone: 'MHK VL', rt_price: 33.9, da_price: 36.4, congestion: 1.2, load: 1680, opportunity: 'Low'},
+                {zone: 'MILLWD', rt_price: 47.1, da_price: 43.8, congestion: 5.8, load: 2650, opportunity: 'Medium'},
+                {zone: 'N.Y.C.', rt_price: 62.4, da_price: 58.9, congestion: 15.2, load: 8750, opportunity: 'High'},
+                {zone: 'NORTH', rt_price: 31.5, da_price: 34.2, congestion: 0.8, load: 1580, opportunity: 'Low'},
+                {zone: 'WEST', rt_price: 39.8, da_price: 42.3, congestion: 2.9, load: 1890, opportunity: 'Low'}
+            ];
+            
+            fallbackZones.forEach(zone => {
+                const row = document.createElement('tr');
+                const spread = zone.rt_price - zone.da_price;
+                const spreadClass = spread > 5 ? 'price-high' : spread < -5 ? 'price-low' : 'price-medium';
+                const rtClass = zone.rt_price > 100 ? 'price-high' : zone.rt_price > 50 ? 'price-medium' : 'price-low';
+                
+                row.innerHTML = `
+                    <td><strong>${zone.zone}</strong></td>
+                    <td class="price-cell ${rtClass}">${zone.rt_price.toFixed(2)}</td>
+                    <td class="price-cell">${zone.da_price.toFixed(2)}</td>
+                    <td class="price-cell ${spreadClass}">${spread.toFixed(2)}</td>
+                    <td>${zone.load.toFixed(0)} MW</td>
+                    <td>${zone.congestion.toFixed(2)}</td>
+                    <td>${zone.opportunity}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        function updateDashboardMetrics(data) {
+            if (data.portfolio) {
+                document.getElementById('total-pnl').textContent = 
+                    (data.portfolio.total_pnl >= 0 ? '+ : '-) + Math.abs(data.portfolio.total_pnl).toLocaleString();
+                document.getElementById('system-load').textContent = 
+                    Math.round(data.portfolio.system_load).toLocaleString() + ' MW';
+                document.getElementById('avg-price').textContent = 
+                    ' + data.portfolio.avg_price.toFixed(2) + '/MWh';
+                document.getElementById('active-positions').textContent = 
+                    data.portfolio.active_positions;
+            }
+        }
+        
+        async function updateOpportunities() {
             try {
-                const response = await fetch('/api/enterprise/predictions');
+                const response = await fetch('/api/opportunities');
                 const data = await response.json();
                 
-                const tbody = document.getElementById('predictions-table-body');
-                tbody.innerHTML = '';
+                const opportunitiesList = document.getElementById('opportunities-list');
+                opportunitiesList.innerHTML = '';
                 
-                data.predictions.forEach(pred => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td><strong>${pred.zone}</strong></td>
-                        <td>${pred.price_1h.toFixed(2)}</td>
-                        <td>${pred.price_4h.toFixed(2)}</td>
-                        <td>${pred.price_24h.toFixed(2)}</td>
-                        <td>${pred.load_1h.toFixed(0)} MW</td>
-                        <td>${(pred.congestion_risk * 100).toFixed(1)}%</td>
-                        <td>${(pred.confidence * 100).toFixed(0)}%</td>
+                data.opportunities.slice(0, 3).forEach(opp => {
+                    const oppDiv = document.createElement('div');
+                    oppDiv.className = 'opportunity-item';
+                    oppDiv.innerHTML = `
+                        <strong>${opp.type.replace('_', ' ').toUpperCase()}: ${opp.zone_from} → ${opp.zone_to}</strong>
+                        <div class="opportunity-profit">Profit Potential: ${Math.round(opp.profit).toLocaleString()}</div>
+                        <div>Spread: ${opp.spread.toFixed(2)}/MWh | Volume: ${Math.round(opp.volume)} MW | Risk: ${opp.risk < 0.3 ? 'Low' : opp.risk < 0.7 ? 'Medium' : 'High'}</div>
                     `;
-                    tbody.appendChild(row);
+                    opportunitiesList.appendChild(oppDiv);
                 });
             } catch (error) {
-                console.error('Error updating predictions table:', error);
+                console.error('Error updating opportunities:', error);
+            }
+        }
+        
+        async function updateAlerts() {
+            try {
+                const response = await fetch('/api/alerts');
+                const data = await response.json();
+                
+                const alertsList = document.getElementById('alerts-list');
+                alertsList.innerHTML = '';
+                
+                data.alerts.slice(0, 3).forEach(alert => {
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = `alert-item alert-${alert.severity.toLowerCase()}`;
+                    alertDiv.innerHTML = `
+                        <strong>${alert.severity}:</strong> ${alert.message}
+                        <div>Action: ${alert.action}</div>
+                    `;
+                    alertsList.appendChild(alertDiv);
+                });
+            } catch (error) {
+                console.error('Error updating alerts:', error);
             }
         }
         
         function refreshAllData() {
-            fetch('/api/enterprise/refresh')
-                .then(() => {
-                    updateZoneData();
-                    updatePredictionsTable();
-                    const activeTab = document.querySelector('.nav-tab.active').textContent.toLowerCase().replace(' ', '');
-                    initializeCharts(activeTab.split(' ')[0]);
-                })
-                .catch(error => console.error('Error refreshing data:', error));
+            const refreshMessage = document.getElementById('refresh-message');
+            refreshMessage.innerHTML = '<div class="success-message">🔄 Refreshing market data...</div>';
+            
+            Promise.all([
+                updateZoneData(),
+                updateOpportunities(),
+                updateAlerts()
+            ]).then(() => {
+                const activeTab = document.querySelector('.nav-tab.active').textContent.toLowerCase();
+                if (activeTab.includes('overview')) {
+                    initPriceComparisonChart();
+                }
+                refreshMessage.innerHTML = '<div class="success-message">✅ Market data refreshed successfully!</div>';
+                setTimeout(() => {
+                    refreshMessage.innerHTML = '';
+                }, 3000);
+            }).catch(error => {
+                console.error('Error refreshing data:', error);
+                refreshMessage.innerHTML = '<div class="success-message">⚠️ Using fallback data - some features may be limited</div>';
+                setTimeout(() => {
+                    refreshMessage.innerHTML = '';
+                }, 5000);
+            });
         }
         
         // Auto-refresh every 2 minutes
@@ -1326,7 +1193,8 @@ dashboard_html = '''
         document.addEventListener('DOMContentLoaded', () => {
             initializeCharts('overview');
             updateZoneData();
-            updatePredictionsTable();
+            updateOpportunities();
+            updateAlerts();
         });
     </script>
 </body>
@@ -1335,135 +1203,102 @@ dashboard_html = '''
 
 # API Routes
 @app.route('/')
-def enterprise_dashboard():
+def dashboard():
     return render_template_string(dashboard_html)
 
-@app.route('/api/enterprise/zone-data')
-def get_enterprise_zone_data():
-    cursor = collector.db_connection.cursor()
-    
-    cursor.execute('''
-        SELECT rt.zone, rt.lbmp, rt.congestion_component, 
-               da.da_lbmp, ld.actual_load, 
-               COALESCE(MAX(to.profit_potential), 0) as max_profit
-        FROM realtime_pricing rt
-        LEFT JOIN dayahead_pricing da ON rt.zone = da.zone 
-        LEFT JOIN load_data ld ON rt.zone = ld.zone 
-        LEFT JOIN trading_opportunities to ON (rt.zone = to.zone_from OR rt.zone = to.zone_to)
-        WHERE rt.created_at = (SELECT MAX(created_at) FROM realtime_pricing)
-        GROUP BY rt.zone
-        ORDER BY rt.zone
-    ''')
-    
-    zone_data = cursor.fetchall()
-    
-    zones = []
-    for row in zone_data:
-        zone, rt_price, congestion, da_price, load, profit = row
-        opportunity = "High" if profit and profit > 5000 else "Medium" if profit and profit > 2000 else "Low"
-        
-        zones.append({
-            'zone': zone or "Unknown",
-            'rt_price': rt_price or np.random.uniform(35, 55),
-            'da_price': da_price or rt_price or np.random.uniform(35, 55),
-            'congestion': congestion or 0,
-            'load': load or np.random.uniform(1500, 8500),
-            'opportunity': opportunity
+@app.route('/api/zone-data')
+def get_zone_data():
+    # Return data directly from collector without database dependency
+    if hasattr(collector, 'current_data') and collector.current_data.get('zones'):
+        return jsonify({
+            'zones': collector.current_data['zones'],
+            'portfolio': collector.current_data.get('portfolio', {})
         })
-    
-    return jsonify({'zones': zones})
-
-@app.route('/api/enterprise/predictions')
-def get_enterprise_predictions():
-    cursor = collector.db_connection.cursor()
-    
-    predictions = []
-    for zone in collector.zones:
-        cursor.execute('''
-            SELECT horizon, predicted_load, predicted_price, congestion_probability
-            FROM predictions 
-            WHERE zone = ? AND created_at = (SELECT MAX(created_at) FROM predictions WHERE zone = ?)
-            ORDER BY 
-                CASE horizon 
-                    WHEN '1H' THEN 1 
-                    WHEN '4H' THEN 2 
-                    WHEN '24H' THEN 3 
-                    ELSE 4
-                END
-        ''', (zone, zone))
-        
-        pred_data = cursor.fetchall()
-        
-        if pred_data:
-            prediction = {
-                'zone': zone,
-                'price_1h': pred_data[0][2] if len(pred_data) > 0 else 40,
-                'price_4h': pred_data[1][2] if len(pred_data) > 1 else 42,
-                'price_24h': pred_data[2][2] if len(pred_data) > 2 else 45,
-                'load_1h': pred_data[0][1] if len(pred_data) > 0 else 2000,
-                'congestion_risk': pred_data[0][3] if len(pred_data) > 0 else 0.15,
-                'confidence': np.random.uniform(0.7, 0.9)
+    else:
+        # Fallback data if collector hasn't generated data yet
+        return jsonify({
+            'zones': [
+                {'zone': 'CAPITL', 'rt_price': 38.5, 'da_price': 42.1, 'congestion': 2.3, 'load': 1850, 'opportunity': 'Medium'},
+                {'zone': 'CENTRL', 'rt_price': 41.2, 'da_price': 39.8, 'congestion': 3.1, 'load': 1920, 'opportunity': 'Low'},
+                {'zone': 'DUNWOD', 'rt_price': 52.3, 'da_price': 48.9, 'congestion': 8.2, 'load': 3150, 'opportunity': 'High'},
+                {'zone': 'GENESE', 'rt_price': 35.8, 'da_price': 38.2, 'congestion': 1.8, 'load': 1750, 'opportunity': 'Low'},
+                {'zone': 'HUD VL', 'rt_price': 48.7, 'da_price': 52.1, 'congestion': 6.5, 'load': 2880, 'opportunity': 'Medium'},
+                {'zone': 'LONGIL', 'rt_price': 58.2, 'da_price': 54.7, 'congestion': 12.1, 'load': 3420, 'opportunity': 'High'},
+                {'zone': 'MHK VL', 'rt_price': 33.9, 'da_price': 36.4, 'congestion': 1.2, 'load': 1680, 'opportunity': 'Low'},
+                {'zone': 'MILLWD', 'rt_price': 47.1, 'da_price': 43.8, 'congestion': 5.8, 'load': 2650, 'opportunity': 'Medium'},
+                {'zone': 'N.Y.C.', 'rt_price': 62.4, 'da_price': 58.9, 'congestion': 15.2, 'load': 8750, 'opportunity': 'High'},
+                {'zone': 'NORTH', 'rt_price': 31.5, 'da_price': 34.2, 'congestion': 0.8, 'load': 1580, 'opportunity': 'Low'},
+                {'zone': 'WEST', 'rt_price': 39.8, 'da_price': 42.3, 'congestion': 2.9, 'load': 1890, 'opportunity': 'Low'}
+            ],
+            'portfolio': {
+                'total_pnl': 47250,
+                'system_load': 30457,
+                'avg_price': 45.2,
+                'active_positions': 23
             }
-        else:
-            base_price = 40 if zone != 'N.Y.C.' else 50
-            base_load = 2000 if zone != 'N.Y.C.' else 8000
-            
-            prediction = {
-                'zone': zone,
-                'price_1h': base_price + np.random.normal(0, 5),
-                'price_4h': base_price + np.random.normal(0, 8),
-                'price_24h': base_price + np.random.normal(0, 12),
-                'load_1h': base_load + np.random.normal(0, 200),
-                'congestion_risk': np.random.uniform(0.1, 0.3),
-                'confidence': np.random.uniform(0.7, 0.9)
-            }
-        
-        predictions.append(prediction)
-    
-    return jsonify({'predictions': predictions})
+        })
 
-@app.route('/api/enterprise/refresh')
-def refresh_enterprise_data():
-    success = collector.fetch_comprehensive_data()
+@app.route('/api/opportunities')
+def get_opportunities():
+    if hasattr(collector, 'current_data') and collector.current_data.get('opportunities'):
+        return jsonify({'opportunities': collector.current_data['opportunities']})
+    else:
+        return jsonify({'opportunities': [
+            {'type': 'spatial_arbitrage', 'zone_from': 'N.Y.C.', 'zone_to': 'LONGIL', 'spread': 15.6, 'volume': 540, 'profit': 8420, 'risk': 0.3},
+            {'type': 'temporal_arbitrage', 'zone_from': 'CAPITL', 'zone_to': 'CAPITL', 'spread': 12.3, 'volume': 425, 'profit': 5230, 'risk': 0.5},
+            {'type': 'spatial_arbitrage', 'zone_from': 'DUNWOD', 'zone_to': 'CENTRL', 'spread': 8.7, 'volume': 320, 'profit': 2780, 'risk': 0.2}
+        ]})
+
+@app.route('/api/alerts')
+def get_alerts():
+    if hasattr(collector, 'current_data') and collector.current_data.get('alerts'):
+        return jsonify({'alerts': collector.current_data['alerts']})
+    else:
+        return jsonify({'alerts': [
+            {'severity': 'CRITICAL', 'message': 'Price spike in NYC - $287.50/MWh', 'action': 'Consider demand response activation'},
+            {'severity': 'HIGH', 'message': 'Interface congestion - PJM at 95%', 'action': 'Monitor for arbitrage opportunities'},
+            {'severity': 'MEDIUM', 'message': 'Wind forecast updated - 15% increase', 'action': 'Adjust renewable energy positions'}
+        ]})
+
+@app.route('/api/refresh')
+def refresh_data():
+    success = collector.generate_realistic_data()
     return jsonify({
         'success': success,
-        'message': 'Enterprise data refreshed successfully',
-        'timestamp': datetime.now().isoformat(),
-        'zones_updated': len(collector.zones)
+        'message': 'Data refreshed successfully' if success else 'Refresh failed, using cached data',
+        'timestamp': datetime.now().isoformat()
     })
 
 @app.route('/health')
 def health():
-    cursor = collector.db_connection.cursor()
-    cursor.execute('SELECT COUNT(*) FROM realtime_pricing')
-    total_records = cursor.fetchone()[0]
-    
     return jsonify({
         'status': 'healthy',
         'service': 'NYISO Enterprise Trading Platform',
-        'version': '3.0.0',
-        'total_records': total_records,
-        'active_zones': len(collector.zones),
-        'uptime': datetime.now().isoformat(),
+        'version': '4.0.0',
+        'zones_monitored': len(collector.zones),
+        'data_available': bool(collector.current_data),
+        'last_update': collector.last_update.isoformat() if hasattr(collector, 'last_update') else None,
         'capabilities': [
-            'Real-time market data',
-            'Day-ahead pricing',
-            'Load forecasting',
-            'Trading opportunities',
-            'AI predictions',
+            'Real-time market data simulation',
+            'Trading opportunity analysis', 
+            'Price forecasting',
             'Market alerts',
-            'Portfolio management'
+            'Portfolio tracking'
         ]
     })
 
 if __name__ == '__main__':
-    print("🚀 Starting NYISO Enterprise Trading Platform V3...")
-    print("📊 Dashboard available at: http://localhost:5000")
-    print("🔄 Enterprise data collection active...")
-    print("🤖 AI models initialized...")
-    print("💰 Trading analytics enabled...")
-    print("⚡ All NYISO zones monitored...")
-    print("🎯 Ready for professional trading operations...")
+    print("🚀 Starting NYISO Enterprise Trading Platform V4...")
+    print("📊 Dashboard: Cloud-optimized version")
+    print("🔄 Data collection: In-memory storage")
+    print("💾 Database: Removed SQLite dependency")
+    print("☁️ Cloud-ready: No file system dependencies")
+    print("⚡ All NYISO zones: Simulated with realistic data")
+    print("🎯 Ready for deployment...")
     
+    # Generate initial data
+    collector.generate_realistic_data()
+    
+    # Start the app
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
